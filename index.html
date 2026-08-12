@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Last Man Standing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1612;
+    --panel:#101F1A;
+    --panel-raised:#16281F;
+    --border:#1E332B;
+    --green:#00FF85;
+    --purple:#7C3FA6;
+    --red:#FF4B4B;
+    --amber:#FFB800;
+    --text:#F2F5F3;
+    --muted:#7C9186;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    background-image:
+      radial-gradient(ellipse 800px 400px at 50% -100px, rgba(0,255,133,0.08), transparent),
+      repeating-linear-gradient(180deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 40px);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding-bottom:60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 16px;}
+
+  header.top{
+    padding:28px 16px 20px;
+    border-bottom:1px solid var(--border);
+    text-align:center;
+    position:relative;
+  }
+  .brand{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.28em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  .brand span{color:var(--green);}
+  h1{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:30px;
+    letter-spacing:0.01em;
+    margin:0;
+    text-transform:uppercase;
+  }
+  .gw-ticker{
+    display:inline-flex;
+    align-items:baseline;
+    gap:8px;
+    margin-top:14px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:8px 16px;
+  }
+  .gw-ticker .label{font-size:11px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;font-family:'Oswald',sans-serif;}
+  .gw-ticker .num{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:20px;color:var(--green);}
+  .lock-pill{
+    display:inline-block;margin-top:10px;font-size:11px;letter-spacing:0.08em;
+    padding:4px 10px;border-radius:20px;font-weight:600;text-transform:uppercase;
+  }
+  .lock-pill.open{background:rgba(0,255,133,0.12);color:var(--green);border:1px solid rgba(0,255,133,0.3);}
+  .lock-pill.closed{background:rgba(255,75,75,0.12);color:var(--red);border:1px solid rgba(255,75,75,0.3);}
+
+  section{padding:24px 16px;border-bottom:1px solid var(--border);}
+  .section-title{
+    font-family:'Oswald',sans-serif;font-weight:600;font-size:13px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;
+  }
+
+  /* identity */
+  .identity-row{display:flex;gap:8px;}
+  select, input[type=text], input[type=password]{
+    background:var(--panel-raised);border:1px solid var(--border);color:var(--text);
+    padding:11px 12px;border-radius:6px;font-size:15px;font-family:'Inter',sans-serif;width:100%;
+  }
+  select:focus, input:focus{outline:none;border-color:var(--green);}
+  button{
+    font-family:'Inter',sans-serif;font-weight:600;font-size:14px;
+    border-radius:6px;padding:11px 18px;border:1px solid var(--border);
+    background:var(--panel-raised);color:var(--text);cursor:pointer;
+  }
+  button:hover{border-color:var(--muted);}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-primary{background:var(--green);color:#04140C;border-color:var(--green);}
+  .btn-primary:hover{background:#33ffa0;border-color:#33ffa0;}
+  .btn-danger{background:transparent;color:var(--red);border-color:rgba(255,75,75,0.4);}
+  .btn-ghost{background:transparent;}
+  .btn-small{padding:6px 10px;font-size:12px;}
+
+  .whoami{
+    display:flex;align-items:center;justify-content:space-between;
+    font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.05em;color:var(--muted);
+    padding:10px 16px;background:var(--panel);
+  }
+  .whoami b{color:var(--text);}
+  .whoami a{color:var(--green);text-decoration:none;font-weight:600;cursor:pointer;}
+
+  /* board - signature element */
+  .board{display:flex;flex-direction:column;gap:6px;}
+  .board-row{
+    display:flex;align-items:center;gap:12px;
+    background:var(--panel);border:1px solid var(--border);border-radius:6px;
+    padding:12px 14px;position:relative;overflow:hidden;
+  }
+  .board-row.eliminated{opacity:0.55;}
+  .status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .status-dot.alive{background:var(--green);box-shadow:0 0 8px rgba(0,255,133,0.6);}
+  .status-dot.out{background:var(--red);}
+  .board-name{font-weight:600;font-size:15px;flex:1;}
+  .board-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .out-stamp{
+    font-family:'Oswald',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.1em;
+    color:var(--red);border:1.5px solid var(--red);padding:2px 8px;border-radius:3px;
+    transform:rotate(-4deg);text-transform:uppercase;flex-shrink:0;
+  }
+  .pick-pip{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.05em;
+    padding:3px 8px;border-radius:4px;text-transform:uppercase;flex-shrink:0;
+  }
+  .pick-pip.in{background:rgba(0,255,133,0.12);color:var(--green);}
+  .pick-pip.pending{background:rgba(255,184,0,0.12);color:var(--amber);}
+
+  /* picks panel */
+  .pick-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;}
+  .used-teams{margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6;}
+  .used-teams b{color:var(--text);}
+  .pick-confirmed{
+    display:flex;align-items:center;justify-content:space-between;
+    background:rgba(0,255,133,0.08);border:1px solid rgba(0,255,133,0.25);
+    border-radius:6px;padding:14px;
+  }
+  .pick-confirmed .team{font-family:'Oswald',sans-serif;font-weight:600;font-size:17px;color:var(--green);}
+
+  /* fixtures / admin */
+  .fixture-row{
+    display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);
+    border-radius:6px;padding:10px 12px;margin-bottom:6px;font-size:14px;
+  }
+  .fixture-row input[type=text]{flex:1;padding:7px 8px;font-size:13px;}
+  .fixture-teams{flex:1;font-weight:500;}
+  .fixture-result{display:flex;gap:4px;}
+  .res-btn{padding:5px 9px;font-size:11px;border-radius:4px;}
+  .res-btn.active-home{background:var(--green);color:#04140C;border-color:var(--green);}
+  .res-btn.active-draw{background:var(--amber);color:#231800;border-color:var(--amber);}
+  .res-btn.active-away{background:var(--green);color:#04140C;border-color:var(--green);}
+
+  .admin-block{background:var(--panel);border:1px dashed var(--border);border-radius:8px;padding:16px;margin-top:10px;}
+  .admin-block h3{font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;color:var(--purple);margin:0 0 10px;}
+  .row-gap{display:flex;gap:8px;margin-bottom:8px;}
+  .row-gap > *{flex:1;}
+  .small-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;}
+
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:20px 0;}
+  .winner-banner{
+    background:linear-gradient(135deg, rgba(0,255,133,0.15), rgba(124,63,166,0.15));
+    border:1px solid var(--green);border-radius:8px;padding:20px;text-align:center;margin:16px;
+  }
+  .winner-banner .label{font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:var(--muted);}
+  .winner-banner .name{font-family:'Oswald',sans-serif;font-size:28px;font-weight:700;color:var(--green);margin:6px 0 14px;text-transform:uppercase;}
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--panel-raised);border:1px solid var(--green);color:var(--green);
+    padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;
+    opacity:0;pointer-events:none;transition:opacity 0.25s;z-index:50;
+  }
+  .toast.show{opacity:1;}
+
+  .setup-screen{max-width:520px;margin:60px auto;padding:0 20px;}
+  .setup-screen pre{background:var(--panel);border:1px solid var(--border);padding:14px;border-radius:6px;font-size:12px;overflow-x:auto;color:var(--green);}
+  .setup-screen ol{line-height:1.9;font-size:14px;}
+  .setup-screen a{color:var(--green);}
+</style>
+</head>
+<body>
+
+<div id="setupScreen" class="setup-screen" style="display:none;">
+  <div class="brand"><span>LAST MAN</span> STANDING</div>
+  <h1 style="font-size:22px;margin-bottom:16px;">One-time setup needed</h1>
+  <p style="color:var(--muted);font-size:14px;line-height:1.6;">This app needs a free Firebase database so everyone's picks sync across devices. Takes about 3 minutes:</p>
+  <ol>
+    <li>Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> and create a free project</li>
+    <li>In the project, click <b>Build → Realtime Database → Create Database</b> (choose test mode)</li>
+    <li>Click the gear icon → Project settings → scroll to "Your apps" → click the <b>&lt;/&gt;</b> web icon → register an app</li>
+    <li>Copy the <code>firebaseConfig</code> object it gives you</li>
+    <li>Paste it into this file, replacing the placeholder near the top of the <code>&lt;script&gt;</code> tag, where it says <code>FIREBASE_CONFIG_PLACEHOLDER</code></li>
+    <li>Re-upload the file to GitHub Pages</li>
+  </ol>
+  <p class="small-note">This only needs doing once. After that, every player just opens the page.</p>
+</div>
+
+<div id="app" style="display:none;">
+  <header class="top">
+    <div class="brand"><span>LAST MAN</span> STANDING</div>
+    <h1>Premier League</h1>
+    <div class="gw-ticker">
+      <span class="label">Gameweek</span>
+      <span class="num" id="gwNum">—</span>
+    </div>
+    <div><span class="lock-pill" id="lockPill">—</span></div>
+  </header>
+
+  <div class="whoami">
+    <div>Playing as <b id="whoamiName">—</b></div>
+    <a id="switchPlayer">switch</a>
+  </div>
+
+  <div id="winnerArea"></div>
+
+  <section id="pickSection">
+    <div class="section-title">Your Pick</div>
+    <div id="pickArea"></div>
+  </section>
+
+  <section>
+    <div class="section-title">The Board</div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="fixturesSection">
+    <div class="section-title">This Week's Fixtures</div>
+    <div id="fixturesArea"></div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      Admin
+      <a id="adminToggle" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">enter PIN</a>
+    </div>
+    <div id="adminArea"><div class="empty">Admin controls are hidden. Enter the PIN to manage players, fixtures and results.</div></div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+/* =========================================================
+   ONE-TIME SETUP: replace this with your own Firebase config
+   (Firebase console → Project settings → Your apps → web app)
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyDI2Bp60PwdVRRkbxrRvxyRZEw7X4Oy8e4",
+  authDomain: "last-man-standing-62500.firebaseapp.com",
+  databaseURL: "https://last-man-standing-62500-default-rtdb.firebaseio.com",
+  projectId: "last-man-standing-62500",
+  storageBucket: "last-man-standing-62500.firebasestorage.app",
+  messagingSenderId: "1079628253705",
+  appId: "1:1079628253705:web:12303c6d9f7d39825986d8",
+  measurementId: "G-FE1HP8ZD27"
+};
+/* ========================================================= */
+
+const ADMIN_PIN = "1234"; // change this to whatever PIN you want
+
+if (firebaseConfig === "FIREBASE_CONFIG_PLACEHOLDER") {
+  document.getElementById('setupScreen').style.display = 'block';
+} else {
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  document.getElementById('app').style.display = 'block';
+  runApp(db);
+}
+
+function runApp(db){
+  let state = { players:{}, meta:{currentGW:1, locked:false}, gameweeks:{} };
+  let myPlayerId = localStorage.getItem('lms_playerId') || null;
+  let isAdmin = false;
+
+  const $ = id => document.getElementById(id);
+
+  db.ref('/').on('value', snap => {
+    const v = snap.val() || {};
+    state.players = v.players || {};
+    state.meta = v.meta || {currentGW:1, locked:false};
+    state.gameweeks = v.gameweeks || {};
+    state.champions = v.champions || {};
+    render();
+  });
+
+  function showToast(msg){
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+
+  function currentGW(){ return state.meta.currentGW || 1; }
+  function gwData(gw){ return state.gameweeks[gw] || {fixtures:{}, picks:{}}; }
+
+  function teamsUsedBy(playerId){
+    const used = [];
+    Object.keys(state.gameweeks).forEach(gw=>{
+      const p = state.gameweeks[gw].picks && state.gameweeks[gw].picks[playerId];
+      if (p && p.team) used.push(p.team);
+    });
+    return used;
+  }
+
+  function allTeamsInFixtures(gw){
+    const fx = gwData(gw).fixtures || {};
+    const teams = [];
+    Object.values(fx).forEach(f=>{ teams.push(f.home, f.away); });
+    return teams;
+  }
+
+  // Deadline = 24 hours before the gameweek's earliest kickoff
+  function gwDeadline(gw){
+    const fx = gwData(gw).fixtures || {};
+    const kicks = Object.values(fx).map(f=>f.kickoff).filter(Boolean);
+    if (!kicks.length) return null;
+    return Math.min(...kicks) - 24*60*60*1000;
+  }
+  function isGwLocked(gw){
+    if (state.meta.locked) return true;
+    const dl = gwDeadline(gw);
+    return dl ? Date.now() >= dl : false;
+  }
+  function fixtureForTeam(gw, team){
+    const fx = gwData(gw).fixtures || {};
+    return Object.values(fx).find(f => f.home === team || f.away === team);
+  }
+  function pickIsChangeable(gw, team){
+    if (isGwLocked(gw)) return false;
+    const f = fixtureForTeam(gw, team);
+    if (f && f.kickoff && Date.now() >= f.kickoff) return false;
+    return true;
+  }
+  function fmtKickoff(ts){
+    if (!ts) return '';
+    return new Date(ts).toLocaleString([], {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  }
+  function displayName(name){
+    return name && name.trim().toLowerCase() === 'aman' ? `${name} (dictator)` : name;
+  }
+
+  // ---------- identity ----------
+  function renderIdentity(){
+    if (myPlayerId && state.players[myPlayerId]) {
+      $('whoamiName').textContent = displayName(state.players[myPlayerId].name);
+    } else {
+      myPlayerId = null;
+      showIdentityPicker();
+    }
+  }
+
+  function showIdentityPicker(){
+    const names = Object.entries(state.players);
+    let html = `<div class="pick-card"><div class="row-gap">
+      <select id="identitySelect">
+        <option value="">Select your name…</option>
+        ${names.map(([id,p])=>`<option value="${id}">${p.name}</option>`).join('')}
+      </select>
+    </div>
+    <div class="row-gap">
+      <input type="text" id="newNameInput" placeholder="Or add your name if new">
+      <button id="joinBtn" class="btn-primary">I'm in</button>
+    </div></div>`;
+    $('pickArea').innerHTML = html;
+    $('joinBtn').onclick = () => {
+      const sel = $('identitySelect').value;
+      const newName = $('newNameInput').value.trim();
+      if (sel) {
+        myPlayerId = sel;
+        localStorage.setItem('lms_playerId', sel);
+        render();
+      } else if (newName) {
+        const ref = db.ref('players').push();
+        ref.set({name:newName, status:'alive'}).then(()=>{
+          myPlayerId = ref.key;
+          localStorage.setItem('lms_playerId', ref.key);
+          render();
+        });
+      } else {
+        showToast('Pick or enter a name first');
+      }
+    };
+  }
+
+  $('switchPlayer').onclick = () => {
+    localStorage.removeItem('lms_playerId');
+    myPlayerId = null;
+    render();
+  };
+
+  // ---------- pick area ----------
+  function renderPick(){
+    if (!myPlayerId || !state.players[myPlayerId]) { showIdentityPicker(); return; }
+    const gw = currentGW();
+    const gd = gwData(gw);
+    const myPick = gd.picks && gd.picks[myPlayerId];
+    const me = state.players[myPlayerId];
+
+    if (me.status === 'out') {
+      $('pickArea').innerHTML = `<div class="empty">You're out — eliminated Gameweek ${me.eliminatedGW || '?'}. Still here to watch the carnage.</div>`;
+      return;
+    }
+
+    const locked = isGwLocked(gw);
+    const dl = gwDeadline(gw);
+
+    if (myPick) {
+      const changeable = pickIsChangeable(gw, myPick.team);
+      $('pickArea').innerHTML = `<div class="pick-confirmed">
+        <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Locked in</div>
+        <div class="team">${myPick.team}</div></div>
+        ${changeable ? `<button class="btn-small btn-ghost" id="changePickBtn">Change</button>` : ''}
+      </div>
+      ${!changeable && !locked ? `<div class="small-note">${myPick.team}'s match has already kicked off, so this pick can no longer be changed.</div>` : ''}`;
+      if (changeable) {
+        $('changePickBtn').onclick = () => renderPickForm(gw, myPick.team);
+      }
+    } else {
+      if (locked) {
+        $('pickArea').innerHTML = `<div class="empty">Picks are closed for this gameweek and you haven't submitted one — check with the admin.</div>`;
+      } else {
+        renderPickForm(gw, null);
+        if (dl) {
+          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)} — 24 hours before the first kickoff.</div>`;
+        }
+      }
+    }
+
+    const used = teamsUsedBy(myPlayerId);
+    if (used.length) {
+      const usedHtml = `<div class="used-teams"><b>Your picks so far:</b> ${used.join(', ')}</div>`;
+      $('pickArea').innerHTML += usedHtml;
+    }
+  }
+
+  function renderPickForm(gw, currentTeam){
+    const teams = allTeamsInFixtures(gw);
+    if (!teams.length) {
+      $('pickArea').innerHTML = `<div class="empty">No fixtures added for this gameweek yet — check back once the admin sets them up.</div>`;
+      return;
+    }
+    const options = teams.map(t => `<option value="${t}" ${t===currentTeam?'selected':''}>${t}</option>`).join('');
+    $('pickArea').innerHTML = `<div class="pick-card">
+      <select id="teamSelect"><option value="">Choose a team to win…</option>${options}</select>
+      <button class="btn-primary" id="submitPickBtn" style="margin-top:10px;width:100%;">Submit pick</button>
+    </div>`;
+    $('submitPickBtn').onclick = () => {
+      const team = $('teamSelect').value;
+      if (!team) { showToast('Pick a team first'); return; }
+      db.ref(`gameweeks/${gw}/picks/${myPlayerId}`).set({team, submittedAt: Date.now()});
+      showToast(`Pick submitted: ${team}`);
+    };
+  }
+
+  // ---------- board ----------
+  function renderBoard(){
+    const ids = Object.keys(state.players);
+    if (!ids.length) { $('board').innerHTML = `<div class="empty">No players yet — add yourself above.</div>`; return; }
+    const gw = currentGW();
+    const gd = gwData(gw);
+    const revealPicks = isGwLocked(gw);
+
+    const sorted = ids.sort((a,b)=>{
+      const pa = state.players[a], pb = state.players[b];
+      if (pa.status !== pb.status) return pa.status === 'alive' ? -1 : 1;
+      return pa.name.localeCompare(pb.name);
+    });
+
+    $('board').innerHTML = sorted.map(id=>{
+      const p = state.players[id];
+      const pick = gd.picks && gd.picks[id];
+      const out = p.status === 'out';
+      let rightHtml = '';
+      if (out) {
+        rightHtml = `<span class="out-stamp">Out · GW${p.eliminatedGW||'?'}</span>`;
+      } else if (pick) {
+        rightHtml = `<span class="pick-pip in">${revealPicks ? pick.team : 'Submitted'}</span>`;
+      } else {
+        rightHtml = `<span class="pick-pip pending">No pick yet</span>`;
+      }
+      return `<div class="board-row ${out?'eliminated':''}">
+        <span class="status-dot ${out?'out':'alive'}"></span>
+        <span class="board-name">${displayName(p.name)}${id===myPlayerId?' <span style="color:var(--muted);font-weight:400;">(you)</span>':''}</span>
+        ${rightHtml}
+      </div>`;
+    }).join('');
+  }
+
+  // ---------- fixtures (read-only view for players) ----------
+  function renderFixtures(){
+    const gw = currentGW();
+    const fx = gwData(gw).fixtures || {};
+    const entries = Object.entries(fx);
+    if (!entries.length) { $('fixturesArea').innerHTML = `<div class="empty">No fixtures added yet.</div>`; return; }
+    $('fixturesArea').innerHTML = entries.map(([id,f])=>{
+      let resultLabel = f.kickoff ? fmtKickoff(f.kickoff) : 'Upcoming';
+      if (f.result === 'home') resultLabel = `${f.home} won`;
+      else if (f.result === 'away') resultLabel = `${f.away} won`;
+      else if (f.result === 'draw') resultLabel = 'Draw';
+      return `<div class="fixture-row"><span class="fixture-teams">${f.home} vs ${f.away}</span>
+        <span class="board-meta">${resultLabel}</span></div>`;
+    }).join('');
+  }
+
+  // ---------- lock pill ----------
+  function renderLockPill(){
+    const el = $('lockPill');
+    const gw = currentGW();
+    const locked = isGwLocked(gw);
+    const dl = gwDeadline(gw);
+    if (locked) {
+      el.textContent = 'Picks closed';
+      el.className = 'lock-pill closed';
+    } else if (dl) {
+      el.textContent = 'Closes ' + fmtKickoff(dl);
+      el.className = 'lock-pill open';
+    } else {
+      el.textContent = 'Picks open';
+      el.className = 'lock-pill open';
+    }
+    $('gwNum').textContent = gw;
+  }
+
+  // ---------- admin ----------
+  $('adminToggle').onclick = () => {
+    if (isAdmin) { isAdmin = false; renderAdmin(); return; }
+    const pin = prompt('Admin PIN:');
+    if (pin === ADMIN_PIN) { isAdmin = true; showToast('Admin unlocked'); }
+    else if (pin !== null) { showToast('Wrong PIN'); }
+    renderAdmin();
+  };
+
+  function renderAdmin(){
+    if (!isAdmin) {
+      $('adminArea').innerHTML = `<div class="empty">Admin controls are hidden. Enter the PIN to manage players, fixtures and results.</div>`;
+      return;
+    }
+    const gw = currentGW();
+    const gd = gwData(gw);
+    const fx = gd.fixtures || {};
+
+    const dl = gwDeadline(gw);
+    let html = `<div class="admin-block">
+      <h3>Gameweek</h3>
+      <div class="row-gap">
+        <input type="text" id="gwInput" value="${gw}" style="max-width:80px;">
+        <button id="setGwBtn" class="btn-small">Set gameweek</button>
+        <button id="lockBtn" class="btn-small ${state.meta.locked?'':''}">${state.meta.locked?'Remove manual lock':'Force lock now'}</button>
+      </div>
+      <p class="small-note">${dl ? `Auto-closes ${fmtKickoff(dl)} (24h before first kickoff).` : "No kickoff times set yet, so picks will not auto-close — sync or add fixtures with times below."} "Force lock" is only for closing picks early if needed.</p>
+    </div>
+
+    <div class="admin-block">
+      <h3>Fixtures — GW${gw}</h3>
+      <button id="syncFixturesBtn" class="btn-small" style="width:100%;margin-bottom:10px;">↻ Sync fixtures &amp; results from API</button>
+      <div id="fixtureAdminList">
+        ${Object.entries(fx).map(([id,f])=>`
+          <div class="fixture-row">
+            <div style="flex:1;">
+              <span class="fixture-teams">${f.home} vs ${f.away}</span>
+              ${f.kickoff ? `<div class="board-meta">${fmtKickoff(f.kickoff)}</div>` : ''}
+            </div>
+            <div class="fixture-result">
+              <button class="res-btn ${f.result==='home'?'active-home':''}" data-fx="${id}" data-r="home">${f.home.slice(0,3).toUpperCase()}</button>
+              <button class="res-btn ${f.result==='draw'?'active-draw':''}" data-fx="${id}" data-r="draw">DRAW</button>
+              <button class="res-btn ${f.result==='away'?'active-away':''}" data-fx="${id}" data-r="away">${f.away.slice(0,3).toUpperCase()}</button>
+            </div>
+            <button class="btn-small btn-danger" data-del="${id}">✕</button>
+          </div>`).join('')}
+      </div>
+      <div class="row-gap" style="margin-top:10px;">
+        <input type="text" id="homeInput" placeholder="Home team">
+        <input type="text" id="awayInput" placeholder="Away team">
+      </div>
+      <div class="row-gap">
+        <input type="datetime-local" id="kickoffInput">
+        <button id="addFixtureBtn" class="btn-small">Add manually</button>
+      </div>
+      <button id="applyResultsBtn" class="btn-primary" style="width:100%;margin-top:10px;">Apply results &amp; eliminate</button>
+      <p class="small-note">Sync pulls fixtures, kickoff times and final scores automatically (it replaces the list above each time you run it, so re-run it later in the week to pick up scores). Set any missing results manually, then click Apply — any alive player whose pick didn't win is marked out, as is anyone with no pick in once the deadline passes.</p>
+    </div>
+
+    <div class="admin-block">
+      <h3>Players</h3>
+      ${Object.entries(state.players).map(([id,p])=>`
+        <div class="fixture-row">
+          <span class="fixture-teams">${p.name} ${p.status==='out'?`<span style="color:var(--red);">(out, GW${p.eliminatedGW})</span>`:''}</span>
+          ${p.status==='out' ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>` : ''}
+        </div>`).join('')}
+    </div>`;
+
+    $('adminArea').innerHTML = html;
+
+    $('setGwBtn').onclick = () => {
+      const n = parseInt($('gwInput').value, 10);
+      if (n > 0) db.ref('meta/currentGW').set(n);
+    };
+    $('lockBtn').onclick = () => {
+      db.ref('meta/locked').set(!state.meta.locked);
+    };
+    $('addFixtureBtn').onclick = () => {
+      const home = $('homeInput').value.trim(), away = $('awayInput').value.trim();
+      const koVal = $('kickoffInput').value;
+      const kickoff = koVal ? new Date(koVal).getTime() : null;
+      if (!home || !away) { showToast('Enter both teams'); return; }
+      db.ref(`gameweeks/${gw}/fixtures`).push({home, away, result:null, kickoff});
+      $('homeInput').value=''; $('awayInput').value=''; $('kickoffInput').value='';
+    };
+    $('syncFixturesBtn').onclick = () => syncFixtures(gw);
+    document.querySelectorAll('[data-fx]').forEach(btn=>{
+      btn.onclick = () => db.ref(`gameweeks/${gw}/fixtures/${btn.dataset.fx}/result`).set(btn.dataset.r);
+    });
+    document.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.onclick = () => db.ref(`gameweeks/${gw}/fixtures/${btn.dataset.del}`).remove();
+    });
+    document.querySelectorAll('[data-reinstate]').forEach(btn=>{
+      btn.onclick = () => db.ref(`players/${btn.dataset.reinstate}`).update({status:'alive', eliminatedGW:null});
+    });
+    $('applyResultsBtn').onclick = () => applyResults(gw);
+  }
+
+  let lastAutoSync = 0;
+  let autoSyncing = false;
+  async function autoSync(){
+    if (autoSyncing) return;
+    if (Date.now() - lastAutoSync < 5*60*1000) return; // at most every 5 min
+    autoSyncing = true;
+    lastAutoSync = Date.now();
+    try { await syncFixtures(currentGW(), true); } catch(e){}
+    autoSyncing = false;
+  }
+
+  async function syncFixtures(gw, silent){
+    if (!silent) showToast('Syncing…');
+    try {
+      const season = seasonStringFor(gw);
+      const url = `https://www.thesportsdb.com/api/v1/json/3/eventsround.php?id=4328&r=${gw}&s=${season}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const events = data.events || [];
+      if (!events.length) { if(!silent) showToast('No fixtures found for that gameweek yet'); return; }
+      const fixturesObj = {};
+      events.forEach((ev, i) => {
+        let kickoff = null;
+        if (ev.strTimestamp) kickoff = new Date(ev.strTimestamp.replace(' ', 'T') + 'Z').getTime();
+        else if (ev.dateEvent && ev.strTime) kickoff = new Date(`${ev.dateEvent}T${ev.strTime}Z`).getTime();
+        let result = null;
+        if (ev.intHomeScore !== null && ev.intAwayScore !== null && ev.intHomeScore !== undefined && ev.intAwayScore !== undefined) {
+          const hs = parseInt(ev.intHomeScore, 10), as = parseInt(ev.intAwayScore, 10);
+          if (!isNaN(hs) && !isNaN(as)) result = hs > as ? 'home' : (as > hs ? 'away' : 'draw');
+        }
+        fixturesObj['f' + i] = { home: ev.strHomeTeam, away: ev.strAwayTeam, kickoff, result };
+      });
+      await db.ref(`gameweeks/${gw}/fixtures`).set(fixturesObj);
+      if (!silent) showToast('Fixtures synced');
+    } catch (e) {
+      if (!silent) showToast('Sync failed — check your connection, or add fixtures manually');
+    }
+  }
+
+  // Premier League season string, e.g. Aug 2026–May 2027 = "2026-2027"
+  function seasonStringFor(gw){
+    const now = new Date();
+    const y = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1; // season flips ~July
+    return `${y}-${y+1}`;
+  }
+
+  function applyResults(gw){
+    const gd = gwData(gw);
+    const fx = gd.fixtures || {};
+    const picks = gd.picks || {};
+    const updates = {};
+
+    Object.entries(state.players).forEach(([id,p])=>{
+      if (p.status !== 'alive') return;
+      const pick = picks[id];
+      if (!pick) {
+        updates[`players/${id}/status`] = 'out';
+        updates[`players/${id}/eliminatedGW`] = gw;
+        return;
+      }
+      const fixture = Object.values(fx).find(f => f.home === pick.team || f.away === pick.team);
+      if (!fixture || !fixture.result) return; // no result yet, skip
+      const won = (fixture.result === 'home' && fixture.home === pick.team) ||
+                  (fixture.result === 'away' && fixture.away === pick.team);
+      if (!won) {
+        updates[`players/${id}/status`] = 'out';
+        updates[`players/${id}/eliminatedGW`] = gw;
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      showToast('Nothing to update — enter results first');
+      return;
+    }
+
+    // Work out who is still standing after this round of eliminations
+    const survivors = Object.keys(state.players).filter(id => {
+      if (updates[`players/${id}/status`] === 'out') return false;
+      return state.players[id].status !== 'out';
+    });
+
+    if (survivors.length === 1) {
+      // Crown the winner, then bring everyone back in for the next gameweek
+      const champId = survivors[0];
+      updates[`champions/gw${gw}`] = {
+        playerId: champId,
+        name: state.players[champId].name,
+        gw: gw,
+        at: Date.now()
+      };
+      Object.keys(state.players).forEach(id=>{
+        updates[`players/${id}/status`] = 'alive';
+        updates[`players/${id}/eliminatedGW`] = null;
+      });
+      db.ref().update(updates).then(()=> showToast(`${state.players[champId].name} wins! Everyone back in next gameweek.`));
+      return;
+    }
+
+    db.ref().update(updates).then(()=> showToast('Results applied'));
+  }
+
+  function aliveIds(){
+    return Object.keys(state.players).filter(id => state.players[id].status !== 'out');
+  }
+
+  function renderWinner(){
+    const champs = state.champions || {};
+    const entries = Object.values(champs).sort((a,b)=> b.gw - a.gw);
+    if (!entries.length) { $('winnerArea').innerHTML = ''; return; }
+    const latest = entries[0];
+    const isCurrent = latest.gw >= currentGW() - 1;
+    const rollHtml = entries.length > 1
+      ? `<p class="small-note" style="margin-top:12px;">Roll of honour: ${entries.map(e=>`${displayName(e.name)} (GW${e.gw})`).join(' · ')}</p>`
+      : '';
+    $('winnerArea').innerHTML = `<div class="winner-banner">
+      <div class="label">${isCurrent ? 'Last Man Standing — GW' + latest.gw : 'Previous winner — GW' + latest.gw}</div>
+      <div class="name">${displayName(latest.name)}</div>
+      <p class="small-note" style="margin:0;">Everyone is back in for the next gameweek.</p>
+      ${rollHtml}
+    </div>`;
+  }
+
+  function render(){
+    renderIdentity();
+    renderLockPill();
+    renderWinner();
+    renderPick();
+    renderBoard();
+    renderFixtures();
+    renderAdmin();
+  }
+
+  setInterval(render, 60000); // keep deadline/lock state fresh even with no data changes
+  setInterval(autoSync, 5*60*1000); // refresh fixtures + results automatically
+  setTimeout(autoSync, 1500); // and once shortly after load
+}
+</script>
+</body>
+</html>
