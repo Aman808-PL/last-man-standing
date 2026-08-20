@@ -486,7 +486,7 @@ function runApp(db){
       if (out) {
         rightHtml = `<span class="out-stamp">Out · GW${p.eliminatedGW||'?'}</span>`;
       } else if (pick) {
-        rightHtml = `<span class="pick-pip in">${revealPicks ? pick.team : 'Submitted'}</span>`;
+        rightHtml = `<span class="pick-pip in">${revealPicks ? pick.team : 'Team selected'}</span>`;
       } else {
         rightHtml = `<span class="pick-pip pending">No pick yet</span>`;
       }
@@ -565,6 +565,7 @@ function runApp(db){
     <div class="admin-block">
       <h3>Fixtures — GW${gw}</h3>
       <button id="syncFixturesBtn" class="btn-small" style="width:100%;margin-bottom:10px;">↻ Sync fixtures &amp; results from API</button>
+      ${syncDiag ? `<p class="small-note" style="color:var(--amber);">${syncDiag}</p>` : ''}
       <div id="fixtureAdminList">
         ${Object.entries(fx).map(([id,f])=>`
           <div class="fixture-row">
@@ -598,7 +599,12 @@ function runApp(db){
         <div class="fixture-row">
           <span class="fixture-teams">${p.name} ${p.status==='out'?`<span style="color:var(--red);">(out, GW${p.eliminatedGW})</span>`:''}</span>
           ${p.status==='out' ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>` : ''}
+          <button class="btn-small btn-danger" data-delplayer="${id}">✕</button>
         </div>`).join('')}
+      <div class="row-gap" style="margin-top:10px;">
+        <input type="text" id="newPlayerInput" placeholder="Player name">
+        <button id="addPlayerBtn" class="btn-small">Add player</button>
+      </div>
     </div>`;
 
     $('adminArea').innerHTML = html;
@@ -628,6 +634,19 @@ function runApp(db){
     document.querySelectorAll('[data-reinstate]').forEach(btn=>{
       btn.onclick = () => db.ref(`players/${btn.dataset.reinstate}`).update({status:'alive', eliminatedGW:null});
     });
+    document.querySelectorAll('[data-delplayer]').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.delplayer;
+        if (confirm(`Remove ${state.players[id].name} from the competition?`)) db.ref(`players/${id}`).remove();
+      };
+    });
+    $('addPlayerBtn').onclick = () => {
+      const name = $('newPlayerInput').value.trim();
+      if (!name) { showToast('Enter a name'); return; }
+      db.ref('players').push({name, status:'alive'});
+      $('newPlayerInput').value='';
+      showToast(`${name} added`);
+    };
     $('applyResultsBtn').onclick = () => applyResults(gw);
   }
 
@@ -650,7 +669,12 @@ function runApp(db){
       const res = await fetch(url);
       const data = await res.json();
       const events = data.events || [];
-      if (!events.length) { if(!silent) showToast('No fixtures found for that gameweek yet'); return; }
+      if (!events.length) {
+        syncDiag = `No fixtures returned for GW${gw}, season ${season}. The data source may not cover this season yet — add fixtures manually below.`;
+        if(!silent) { showToast('No fixtures found'); renderAdmin(); }
+        return;
+      }
+      syncDiag = '';
       const fixturesObj = {};
       events.forEach((ev, i) => {
         let kickoff = null;
@@ -666,9 +690,11 @@ function runApp(db){
       await db.ref(`gameweeks/${gw}/fixtures`).set(fixturesObj);
       if (!silent) showToast('Fixtures synced');
     } catch (e) {
-      if (!silent) showToast('Sync failed — check your connection, or add fixtures manually');
+      syncDiag = `Sync error: ${e.message}. The free fixtures API may be blocked or unavailable — add fixtures manually below.`;
+      if (!silent) { showToast('Sync failed'); renderAdmin(); }
     }
   }
+  let syncDiag = '';
 
   // Premier League season string, e.g. Aug 2026–May 2027 = "2026-2027"
   function seasonStringFor(gw){
