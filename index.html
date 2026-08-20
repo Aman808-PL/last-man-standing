@@ -429,32 +429,29 @@ function runApp(db){
 
     const locked = isGwLocked(gw);
     const dl = gwDeadline(gw);
+    const used = teamsUsedBy(myPlayerId);
+    const usedHtml = used.length
+      ? `<div class="used-teams"><b>Teams used this round:</b> ${used.join(', ')}</div>`
+      : '';
 
     if (myPick) {
       $('pickArea').innerHTML = `<div class="pick-confirmed">
         <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Locked in</div>
         <div class="team">${myPick.team}</div></div>
       </div>
-      <div class="small-note">Your pick is final for this gameweek and can't be changed.</div>`;
+      <div class="small-note">Your pick is final for this gameweek and can't be changed.</div>
+      ${usedHtml}`;
+    } else if (locked) {
+      $('pickArea').innerHTML = `<div class="empty">Picks are closed for this gameweek and you haven't submitted one — check with the admin.</div>${usedHtml}`;
     } else {
-      if (locked) {
-        $('pickArea').innerHTML = `<div class="empty">Picks are closed for this gameweek and you haven't submitted one — check with the admin.</div>`;
-      } else {
-        renderPickForm(gw, null);
-        if (dl) {
-          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)}. Once submitted, your pick is final.</div>`;
-        }
-      }
-    }
-
-    const used = teamsUsedBy(myPlayerId);
-    if (used.length) {
-      const usedHtml = `<div class="used-teams"><b>Teams used this round:</b> ${used.join(', ')}</div>`;
-      $('pickArea').innerHTML += usedHtml;
+      const noteHtml = dl
+        ? `<div class="small-note">Picks close ${fmtKickoff(dl)}. Once submitted, your pick is final.</div>`
+        : '';
+      renderPickForm(gw, noteHtml + usedHtml);
     }
   }
 
-  function renderPickForm(gw, currentTeam){
+  function renderPickForm(gw, trailingHtml){
     const teams = allTeamsInFixtures(gw);
     if (!teams.length) {
       $('pickArea').innerHTML = `<div class="empty">No fixtures added for this gameweek yet — check back once the admin sets them up.</div>`;
@@ -465,7 +462,7 @@ function runApp(db){
     $('pickArea').innerHTML = `<div class="pick-card">
       <select id="teamSelect"><option value="">Choose a team to win…</option>${options}</select>
       <button class="btn-primary" id="submitPickBtn" style="margin-top:10px;width:100%;">Submit pick</button>
-    </div>`;
+    </div>${trailingHtml || ''}`;
     $('submitPickBtn').onclick = () => {
       const team = $('teamSelect').value;
       if (!team) { showToast('Pick a team first'); return; }
@@ -473,8 +470,9 @@ function runApp(db){
       if (isGwLocked(gw)) { showToast('Picks are closed for this gameweek'); return; }
       const existing = gwData(gw).picks && gwData(gw).picks[myPlayerId];
       if (existing) { showToast('Your pick is already locked in'); return; }
-      db.ref(`gameweeks/${gw}/picks/${myPlayerId}`).set({team, submittedAt: Date.now()});
-      showToast(`Pick submitted: ${team}`);
+      db.ref(`gameweeks/${gw}/picks/${myPlayerId}`).set({team, submittedAt: Date.now()})
+        .then(()=> showToast(`Pick submitted: ${team}`))
+        .catch(err => { showToast('Could not save pick'); alert('Save failed: ' + err.message); });
     };
   }
 
