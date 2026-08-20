@@ -270,6 +270,10 @@ const firebaseConfig = {
 
 const ADMIN_PIN = "1234"; // change this to whatever PIN you want
 
+// Players added automatically the first time the app runs.
+// Any name already in the database is skipped, so this can't create duplicates.
+const DEFAULT_PLAYERS = ["Aman","Gav","Taron","Mani","Tav","Pav","Jon","Nick","Aaron","Bal","Sam","Parji"];
+
 if (firebaseConfig === "FIREBASE_CONFIG_PLACEHOLDER") {
   document.getElementById('setupScreen').style.display = 'block';
 } else {
@@ -292,6 +296,7 @@ function runApp(db){
     state.meta = v.meta || {currentGW:1, locked:false};
     state.gameweeks = v.gameweeks || {};
     state.champions = v.champions || {};
+    seedPlayersOnce();
     render();
   });
 
@@ -362,35 +367,26 @@ function runApp(db){
   }
 
   function showIdentityPicker(){
-    const names = Object.entries(state.players);
-    let html = `<div class="pick-card"><div class="row-gap">
+    const names = Object.entries(state.players).sort((a,b)=> a[1].name.localeCompare(b[1].name));
+    if (!names.length) {
+      $('pickArea').innerHTML = `<div class="empty">Player list is loading… if this doesn't clear, the admin needs to add players.</div>`;
+      return;
+    }
+    let html = `<div class="pick-card">
       <select id="identitySelect">
         <option value="">Select your name…</option>
         ${names.map(([id,p])=>`<option value="${id}">${p.name}</option>`).join('')}
       </select>
-    </div>
-    <div class="row-gap">
-      <input type="text" id="newNameInput" placeholder="Or add your name if new">
-      <button id="joinBtn" class="btn-primary">I'm in</button>
-    </div></div>`;
+      <button id="joinBtn" class="btn-primary" style="margin-top:10px;width:100%;">Continue</button>
+      <p class="small-note">Name not listed? Ask the admin to add you.</p>
+    </div>`;
     $('pickArea').innerHTML = html;
     $('joinBtn').onclick = () => {
       const sel = $('identitySelect').value;
-      const newName = $('newNameInput').value.trim();
-      if (sel) {
-        myPlayerId = sel;
-        localStorage.setItem('lms_playerId', sel);
-        render();
-      } else if (newName) {
-        const ref = db.ref('players').push();
-        ref.set({name:newName, status:'alive'}).then(()=>{
-          myPlayerId = ref.key;
-          localStorage.setItem('lms_playerId', ref.key);
-          render();
-        });
-      } else {
-        showToast('Pick or enter a name first');
-      }
+      if (!sel) { showToast('Select your name first'); return; }
+      myPlayerId = sel;
+      localStorage.setItem('lms_playerId', sel);
+      render();
     };
   }
 
@@ -757,6 +753,22 @@ function runApp(db){
     }
 
     db.ref().update(updates).then(()=> showToast('Results applied'));
+  }
+
+  let seedAttempted = false;
+  function seedPlayersOnce(){
+    if (seedAttempted) return;
+    if (state.meta.playersSeeded) { seedAttempted = true; return; }
+    seedAttempted = true;
+    const existing = new Set(Object.values(state.players).map(p => (p.name||'').trim().toLowerCase()));
+    const updates = {};
+    DEFAULT_PLAYERS.forEach(name => {
+      if (existing.has(name.trim().toLowerCase())) return;
+      const key = db.ref('players').push().key;
+      updates[`players/${key}`] = { name, status: 'alive' };
+    });
+    updates['meta/playersSeeded'] = true;
+    db.ref().update(updates);
   }
 
   function aliveIds(){
