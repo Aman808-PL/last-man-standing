@@ -305,9 +305,13 @@ function runApp(db){
   function currentGW(){ return state.meta.currentGW || 1; }
   function gwData(gw){ return state.gameweeks[gw] || {fixtures:{}, picks:{}}; }
 
+  // Teams a player has used in the CURRENT round (resets when a winner is crowned)
+  function roundStartGW(){ return state.meta.roundStartGW || 1; }
   function teamsUsedBy(playerId){
     const used = [];
+    const start = roundStartGW();
     Object.keys(state.gameweeks).forEach(gw=>{
+      if (parseInt(gw,10) < start) return;
       const p = state.gameweeks[gw].picks && state.gameweeks[gw].picks[playerId];
       if (p && p.team) used.push(p.team);
     });
@@ -321,12 +325,14 @@ function runApp(db){
     return teams;
   }
 
-  // Deadline = 24 hours before the gameweek's earliest kickoff
+  // Deadline = 9am on the day of the gameweek's first fixture
   function gwDeadline(gw){
     const fx = gwData(gw).fixtures || {};
     const kicks = Object.values(fx).map(f=>f.kickoff).filter(Boolean);
     if (!kicks.length) return null;
-    return Math.min(...kicks) - 24*60*60*1000;
+    const first = new Date(Math.min(...kicks));
+    first.setHours(9, 0, 0, 0);
+    return first.getTime();
   }
   function isGwLocked(gw){
     if (state.meta.locked) return true;
@@ -336,12 +342,6 @@ function runApp(db){
   function fixtureForTeam(gw, team){
     const fx = gwData(gw).fixtures || {};
     return Object.values(fx).find(f => f.home === team || f.away === team);
-  }
-  function pickIsChangeable(gw, team){
-    if (isGwLocked(gw)) return false;
-    const f = fixtureForTeam(gw, team);
-    if (f && f.kickoff && Date.now() >= f.kickoff) return false;
-    return true;
   }
   function fmtKickoff(ts){
     if (!ts) return '';
@@ -417,30 +417,25 @@ function runApp(db){
     const dl = gwDeadline(gw);
 
     if (myPick) {
-      const changeable = pickIsChangeable(gw, myPick.team);
       $('pickArea').innerHTML = `<div class="pick-confirmed">
         <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Locked in</div>
         <div class="team">${myPick.team}</div></div>
-        ${changeable ? `<button class="btn-small btn-ghost" id="changePickBtn">Change</button>` : ''}
       </div>
-      ${!changeable && !locked ? `<div class="small-note">${myPick.team}'s match has already kicked off, so this pick can no longer be changed.</div>` : ''}`;
-      if (changeable) {
-        $('changePickBtn').onclick = () => renderPickForm(gw, myPick.team);
-      }
+      <div class="small-note">Your pick is final for this gameweek and can't be changed.</div>`;
     } else {
       if (locked) {
         $('pickArea').innerHTML = `<div class="empty">Picks are closed for this gameweek and you haven't submitted one — check with the admin.</div>`;
       } else {
         renderPickForm(gw, null);
         if (dl) {
-          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)} — 24 hours before the first kickoff.</div>`;
+          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)} — 9am on the day of the first game. Once submitted, your pick is final.</div>`;
         }
       }
     }
 
     const used = teamsUsedBy(myPlayerId);
     if (used.length) {
-      const usedHtml = `<div class="used-teams"><b>Your picks so far:</b> ${used.join(', ')}</div>`;
+      const usedHtml = `<div class="used-teams"><b>Teams used this round:</b> ${used.join(', ')}</div>`;
       $('pickArea').innerHTML += usedHtml;
     }
   }
@@ -451,7 +446,8 @@ function runApp(db){
       $('pickArea').innerHTML = `<div class="empty">No fixtures added for this gameweek yet — check back once the admin sets them up.</div>`;
       return;
     }
-    const options = teams.map(t => `<option value="${t}" ${t===currentTeam?'selected':''}>${t}</option>`).join('');
+    const used = new Set(teamsUsedBy(myPlayerId));
+    const options = teams.map(t => `<option value="${t}" ${used.has(t)?'disabled':''}>${t}${used.has(t)?' — already used':''}</option>`).join('');
     $('pickArea').innerHTML = `<div class="pick-card">
       <select id="teamSelect"><option value="">Choose a team to win…</option>${options}</select>
       <button class="btn-primary" id="submitPickBtn" style="margin-top:10px;width:100%;">Submit pick</button>
@@ -459,6 +455,10 @@ function runApp(db){
     $('submitPickBtn').onclick = () => {
       const team = $('teamSelect').value;
       if (!team) { showToast('Pick a team first'); return; }
+      if (teamsUsedBy(myPlayerId).includes(team)) { showToast('You already used that team this round'); return; }
+      if (isGwLocked(gw)) { showToast('Picks are closed for this gameweek'); return; }
+      const existing = gwData(gw).picks && gwData(gw).picks[myPlayerId];
+      if (existing) { showToast('Your pick is already locked in'); return; }
       db.ref(`gameweeks/${gw}/picks/${myPlayerId}`).set({team, submittedAt: Date.now()});
       showToast(`Pick submitted: ${team}`);
     };
@@ -470,7 +470,7 @@ function runApp(db){
     if (!ids.length) { $('board').innerHTML = `<div class="empty">No players yet — add yourself above.</div>`; return; }
     const gw = currentGW();
     const gd = gwData(gw);
-    const revealPicks = isGwLocked(gw);
+    const revealPicks = isAdmin;
 
     const sorted = ids.sort((a,b)=>{
       const pa = state.players[a], pb = state.players[b];
@@ -559,7 +559,7 @@ function runApp(db){
         <button id="setGwBtn" class="btn-small">Set gameweek</button>
         <button id="lockBtn" class="btn-small ${state.meta.locked?'':''}">${state.meta.locked?'Remove manual lock':'Force lock now'}</button>
       </div>
-      <p class="small-note">${dl ? `Auto-closes ${fmtKickoff(dl)} (24h before first kickoff).` : "No kickoff times set yet, so picks will not auto-close — sync or add fixtures with times below."} "Force lock" is only for closing picks early if needed.</p>
+      <p class="small-note">${dl ? `Auto-closes ${fmtKickoff(dl)} (9am on the day of the first game).` : "No kickoff times set yet, so picks will not auto-close — sync or add fixtures with times below."} "Force lock" is only for closing picks early if needed.</p>
     </div>
 
     <div class="admin-block">
@@ -751,6 +751,7 @@ function runApp(db){
         updates[`players/${id}/status`] = 'alive';
         updates[`players/${id}/eliminatedGW`] = null;
       });
+      updates['meta/roundStartGW'] = gw + 1; // used-team history clears for the new round
       db.ref().update(updates).then(()=> showToast(`${state.players[champId].name} wins! Everyone back in next gameweek.`));
       return;
     }
