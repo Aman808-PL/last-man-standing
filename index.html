@@ -274,6 +274,22 @@ const ADMIN_PIN = "1234"; // change this to whatever PIN you want
 // Any name already in the database is skipped, so this can't create duplicates.
 const DEFAULT_PLAYERS = ["Aman","Gav","Taron","Mani","Tav","Pav","Jon","Nick","Aaron","Bal","Sam","Parji"];
 
+// Confirmed Premier League 2026/27 Gameweek 1 fixtures (times in UK BST = UTC+1)
+const BUILTIN_FIXTURES = {
+  1: [
+    ["Arsenal","Coventry City","2026-08-21T20:00:00+01:00"],
+    ["Hull City","Manchester United","2026-08-22T12:30:00+01:00"],
+    ["Everton","Crystal Palace","2026-08-22T15:00:00+01:00"],
+    ["Ipswich Town","Sunderland","2026-08-22T15:00:00+01:00"],
+    ["Nottingham Forest","Leeds United","2026-08-22T15:00:00+01:00"],
+    ["Brentford","Tottenham Hotspur","2026-08-22T17:30:00+01:00"],
+    ["Brighton & Hove Albion","Aston Villa","2026-08-23T14:00:00+01:00"],
+    ["Manchester City","AFC Bournemouth","2026-08-23T14:00:00+01:00"],
+    ["Newcastle United","Liverpool","2026-08-23T16:30:00+01:00"],
+    ["Fulham","Chelsea","2026-08-24T20:00:00+01:00"]
+  ]
+};
+
 if (firebaseConfig === "FIREBASE_CONFIG_PLACEHOLDER") {
   document.getElementById('setupScreen').style.display = 'block';
 } else {
@@ -330,8 +346,10 @@ function runApp(db){
     return teams;
   }
 
-  // Deadline = 9am on the day of the gameweek's first fixture
+  // Deadline = 9am on the day of the gameweek's first fixture, unless overridden
   function gwDeadline(gw){
+    const override = gwData(gw).deadlineOverride;
+    if (override) return override;
     const fx = gwData(gw).fixtures || {};
     const kicks = Object.values(fx).map(f=>f.kickoff).filter(Boolean);
     if (!kicks.length) return null;
@@ -424,7 +442,7 @@ function runApp(db){
       } else {
         renderPickForm(gw, null);
         if (dl) {
-          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)} — 9am on the day of the first game. Once submitted, your pick is final.</div>`;
+          $('pickArea').innerHTML += `<div class="small-note">Picks close ${fmtKickoff(dl)}. Once submitted, your pick is final.</div>`;
         }
       }
     }
@@ -555,12 +573,19 @@ function runApp(db){
         <button id="setGwBtn" class="btn-small">Set gameweek</button>
         <button id="lockBtn" class="btn-small ${state.meta.locked?'':''}">${state.meta.locked?'Remove manual lock':'Force lock now'}</button>
       </div>
-      <p class="small-note">${dl ? `Auto-closes ${fmtKickoff(dl)} (9am on the day of the first game).` : "No kickoff times set yet, so picks will not auto-close — sync or add fixtures with times below."} "Force lock" is only for closing picks early if needed.</p>
+      <p class="small-note">${dl ? `${gwData(gw).deadlineOverride ? 'Deadline overridden to' : 'Auto-closes'} ${fmtKickoff(dl)}${gwData(gw).deadlineOverride ? '' : ' (9am on the day of the first game)'}.` : "No kickoff times set yet, so picks will not auto-close — sync or add fixtures with times below."} "Force lock" is only for closing picks early if needed.</p>
+      <div class="row-gap" style="margin-top:8px;">
+        <input type="datetime-local" id="deadlineInput">
+        <button id="setDeadlineBtn" class="btn-small">Set deadline</button>
+        ${gwData(gw).deadlineOverride ? `<button id="clearDeadlineBtn" class="btn-small btn-ghost">Clear</button>` : ''}
+      </div>
+      <p class="small-note">Use this to give a one-off extension for a gameweek. Clearing it returns to the normal 9am rule.</p>
     </div>
 
     <div class="admin-block">
       <h3>Fixtures — GW${gw}</h3>
-      <button id="syncFixturesBtn" class="btn-small" style="width:100%;margin-bottom:10px;">↻ Sync fixtures &amp; results from API</button>
+      <button id="syncFixturesBtn" class="btn-small" style="width:100%;margin-bottom:6px;">↻ Sync fixtures &amp; results from API</button>
+      ${BUILTIN_FIXTURES[gw] ? `<button id="loadBuiltinBtn" class="btn-small" style="width:100%;margin-bottom:10px;">⤓ Load built-in GW${gw} fixtures</button>` : ''}
       ${syncDiag ? `<p class="small-note" style="color:var(--amber);">${syncDiag}</p>` : ''}
       <div id="fixtureAdminList">
         ${Object.entries(fx).map(([id,f])=>`
@@ -612,6 +637,18 @@ function runApp(db){
     $('lockBtn').onclick = () => {
       db.ref('meta/locked').set(!state.meta.locked);
     };
+    $('setDeadlineBtn').onclick = () => {
+      const v = $('deadlineInput').value;
+      if (!v) { showToast('Pick a date and time first'); return; }
+      db.ref(`gameweeks/${gw}/deadlineOverride`).set(new Date(v).getTime());
+      showToast('Deadline updated');
+    };
+    if ($('clearDeadlineBtn')) {
+      $('clearDeadlineBtn').onclick = () => {
+        db.ref(`gameweeks/${gw}/deadlineOverride`).remove();
+        showToast('Back to the 9am rule');
+      };
+    }
     $('addFixtureBtn').onclick = () => {
       const home = $('homeInput').value.trim(), away = $('awayInput').value.trim();
       const koVal = $('kickoffInput').value;
@@ -621,6 +658,22 @@ function runApp(db){
       $('homeInput').value=''; $('awayInput').value=''; $('kickoffInput').value='';
     };
     $('syncFixturesBtn').onclick = () => syncFixtures(gw);
+    if ($('loadBuiltinBtn')) {
+      $('loadBuiltinBtn').onclick = () => {
+        const existing = gwData(gw).fixtures || {};
+        const obj = {};
+        BUILTIN_FIXTURES[gw].forEach((f, i) => {
+          const prev = Object.values(existing).find(e => e.home === f[0] && e.away === f[1]);
+          obj['f' + i] = {
+            home: f[0],
+            away: f[1],
+            kickoff: new Date(f[2]).getTime(),
+            result: prev ? (prev.result || null) : null
+          };
+        });
+        db.ref(`gameweeks/${gw}/fixtures`).set(obj).then(()=> showToast('GW' + gw + ' fixtures loaded'));
+      };
+    }
     document.querySelectorAll('[data-fx]').forEach(btn=>{
       btn.onclick = () => db.ref(`gameweeks/${gw}/fixtures/${btn.dataset.fx}/result`).set(btn.dataset.r);
     });
@@ -651,6 +704,9 @@ function runApp(db){
   async function autoSync(){
     if (autoSyncing) return;
     if (Date.now() - lastAutoSync < 5*60*1000) return; // at most every 5 min
+    // Don't let a partial API response clobber a complete fixture list
+    const existingCount = Object.keys(gwData(currentGW()).fixtures || {}).length;
+    if (existingCount >= 10) return;
     autoSyncing = true;
     lastAutoSync = Date.now();
     try { await syncFixtures(currentGW(), true); } catch(e){}
