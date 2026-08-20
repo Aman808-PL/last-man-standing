@@ -268,7 +268,7 @@ const firebaseConfig = {
 };
 /* ========================================================= */
 
-const ADMIN_PIN = "1234"; // change this to whatever PIN you want
+const ADMIN_PIN = "8454"; // change this to whatever PIN you want
 
 // Players added automatically the first time the app runs.
 // Any name already in the database is skipped, so this can't create duplicates.
@@ -613,6 +613,20 @@ function runApp(db){
     </div>
 
     <div class="admin-block">
+      <h3>Picks — GW${gw}</h3>
+      ${Object.entries(state.players).map(([id,p])=>{
+        const pk = (gwData(gw).picks || {})[id];
+        return `<div class="fixture-row">
+          <span class="fixture-teams">${p.name}</span>
+          <span class="board-meta">${pk ? pk.team : '—'}</span>
+          ${pk ? `<button class="btn-small btn-danger" data-clearpick="${id}">Clear</button>` : ''}
+        </div>`;
+      }).join('')}
+      <button id="clearAllPicksBtn" class="btn-small btn-danger" style="width:100%;margin-top:10px;">Clear all picks for GW${gw}</button>
+      <p class="small-note">Only you can clear picks. Once cleared, that player can submit a new one (if the deadline hasn't passed).</p>
+    </div>
+
+    <div class="admin-block">
       <h3>Players</h3>
       ${Object.entries(state.players).map(([id,p])=>`
         <div class="fixture-row">
@@ -687,6 +701,19 @@ function runApp(db){
         if (confirm(`Remove ${state.players[id].name} from the competition?`)) db.ref(`players/${id}`).remove();
       };
     });
+    document.querySelectorAll('[data-clearpick]').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.clearpick;
+        if (confirm(`Clear ${state.players[id].name}'s pick for GW${gw}?`)) {
+          db.ref(`gameweeks/${gw}/picks/${id}`).remove().then(()=> showToast('Pick cleared'));
+        }
+      };
+    });
+    $('clearAllPicksBtn').onclick = () => {
+      if (confirm(`Clear ALL picks for GW${gw}? This can't be undone.`)) {
+        db.ref(`gameweeks/${gw}/picks`).remove().then(()=> showToast('All picks cleared'));
+      }
+    };
     $('addPlayerBtn').onclick = () => {
       const name = $('newPlayerInput').value.trim();
       if (!name) { showToast('Enter a name'); return; }
