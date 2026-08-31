@@ -287,6 +287,18 @@ const BUILTIN_FIXTURES = {
     ["Manchester City","AFC Bournemouth","2026-08-23T14:00:00+01:00"],
     ["Newcastle United","Liverpool","2026-08-23T16:30:00+01:00"],
     ["Fulham","Chelsea","2026-08-24T20:00:00+01:00"]
+  ],
+  2: [
+    ["Crystal Palace","Manchester City","2026-08-28T20:00:00+01:00"],
+    ["Liverpool","Nottingham Forest","2026-08-29T12:30:00+01:00"],
+    ["AFC Bournemouth","Everton","2026-08-29T15:00:00+01:00"],
+    ["Coventry City","Hull City","2026-08-29T15:00:00+01:00"],
+    ["Tottenham Hotspur","Newcastle United","2026-08-29T17:30:00+01:00"],
+    ["Chelsea","Brighton & Hove Albion","2026-08-30T14:00:00+01:00"],
+    ["Leeds United","Brentford","2026-08-30T14:00:00+01:00"],
+    ["Sunderland","Fulham","2026-08-30T14:00:00+01:00"],
+    ["Manchester United","Ipswich Town","2026-08-30T16:30:00+01:00"],
+    ["Aston Villa","Arsenal","2026-08-31T20:00:00+01:00"]
   ]
 };
 
@@ -313,6 +325,7 @@ function runApp(db){
     state.gameweeks = v.gameweeks || {};
     state.champions = v.champions || {};
     seedPlayersOnce();
+    fillMissingFixtures();
     render();
   });
 
@@ -376,10 +389,13 @@ function runApp(db){
 
   // ---------- identity ----------
   function renderIdentity(){
-    if (myPlayerId && state.players[myPlayerId]) {
-      $('whoamiName').textContent = displayName(state.players[myPlayerId].name);
+    const p = myPlayerId && state.players[myPlayerId];
+    if (p) {
+      $('whoamiName').textContent = displayName(p.name);
     } else {
       myPlayerId = null;
+      localStorage.removeItem('lms_playerId');
+      $('whoamiName').textContent = '—';
       showIdentityPicker();
     }
   }
@@ -634,6 +650,7 @@ function runApp(db){
           ${p.status==='out' ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>` : ''}
           <button class="btn-small btn-danger" data-delplayer="${id}">✕</button>
         </div>`).join('')}
+
       <div class="row-gap" style="margin-top:10px;">
         <input type="text" id="newPlayerInput" placeholder="Player name">
         <button id="addPlayerBtn" class="btn-small">Add player</button>
@@ -764,7 +781,20 @@ function runApp(db){
         }
         fixturesObj['f' + i] = { home: ev.strHomeTeam, away: ev.strAwayTeam, kickoff, result };
       });
-      await db.ref(`gameweeks/${gw}/fixtures`).set(fixturesObj);
+      // Merge rather than replace: a partial API response must never wipe good fixtures
+      const existingFx = gwData(gw).fixtures || {};
+      const merged = {};
+      Object.values(existingFx).forEach((e, i) => { merged['e' + i] = e; });
+      Object.values(fixturesObj).forEach(f => {
+        const key = Object.keys(merged).find(k => merged[k].home === f.home && merged[k].away === f.away);
+        if (key) {
+          if (f.result) merged[key].result = f.result;
+          if (f.kickoff) merged[key].kickoff = f.kickoff;
+        } else {
+          merged['n' + Object.keys(merged).length] = f;
+        }
+      });
+      await db.ref(`gameweeks/${gw}/fixtures`).set(merged);
       if (!silent) showToast('Fixtures synced');
     } catch (e) {
       syncDiag = `Sync error: ${e.message}. The free fixtures API may be blocked or unavailable — add fixtures manually below.`;
@@ -785,6 +815,9 @@ function runApp(db){
     const fx = gd.fixtures || {};
     const picks = gd.picks || {};
     const updates = {};
+    let evaluated = 0;
+    const pending = [];
+    const unmatched = [];
 
     Object.entries(state.players).forEach(([id,p])=>{
       if (p.status !== 'alive') return;
@@ -795,7 +828,9 @@ function runApp(db){
         return;
       }
       const fixture = Object.values(fx).find(f => f.home === pick.team || f.away === pick.team);
-      if (!fixture || !fixture.result) return; // no result yet, skip
+      if (!fixture) { unmatched.push(`${p.name} (${pick.team})`); return; }
+      if (!fixture.result) { pending.push(p.name); return; }
+      evaluated++;
       const won = (fixture.result === 'home' && fixture.home === pick.team) ||
                   (fixture.result === 'away' && fixture.away === pick.team);
       if (!won) {
@@ -805,7 +840,15 @@ function runApp(db){
     });
 
     if (Object.keys(updates).length === 0) {
-      showToast('Nothing to update — enter results first');
+      if (unmatched.length) {
+        alert(`These picks don't match any fixture, so they can't be settled:\n\n${unmatched.join('\n')}\n\nCheck the team names match the fixture list exactly.`);
+      } else if (pending.length) {
+        showToast(`Waiting on results for ${pending.length} pick(s)`);
+      } else if (evaluated > 0) {
+        showToast('All picks won — nobody eliminated this week');
+      } else {
+        showToast('No results entered yet');
+      }
       return;
     }
 
@@ -834,6 +877,28 @@ function runApp(db){
     }
 
     db.ref().update(updates).then(()=> showToast('Results applied'));
+  }
+
+  // If the gameweek has fewer fixtures than the built-in list, fill in the missing ones.
+  let fixtureFillAttempted = {};
+  function fillMissingFixtures(){
+    const gw = currentGW();
+    const builtin = BUILTIN_FIXTURES[gw];
+    if (!builtin) return;
+    if (fixtureFillAttempted[gw]) return;
+    const existing = gwData(gw).fixtures || {};
+    const keys = Object.keys(existing);
+    if (keys.length >= builtin.length) { fixtureFillAttempted[gw] = true; return; }
+    fixtureFillAttempted[gw] = true;
+    const merged = {};
+    keys.forEach((k,i)=>{ merged['e'+i] = existing[k]; });
+    builtin.forEach(f => {
+      const match = Object.keys(merged).find(k => merged[k].home === f[0] && merged[k].away === f[1]);
+      if (!match) {
+        merged['b' + Object.keys(merged).length] = { home: f[0], away: f[1], kickoff: new Date(f[2]).getTime(), result: null };
+      }
+    });
+    db.ref(`gameweeks/${gw}/fixtures`).set(merged);
   }
 
   let seedAttempted = false;
