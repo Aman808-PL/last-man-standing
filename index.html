@@ -647,7 +647,9 @@ function runApp(db){
       ${Object.entries(state.players).map(([id,p])=>`
         <div class="fixture-row">
           <span class="fixture-teams">${p.name} ${p.status==='out'?`<span style="color:var(--red);">(out, GW${p.eliminatedGW})</span>`:''}</span>
-          ${p.status==='out' ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>` : ''}
+          ${p.status==='out'
+            ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>`
+            : `<button class="btn-small btn-danger" data-markout="${id}">Mark out</button>`}
           <button class="btn-small btn-danger" data-delplayer="${id}">✕</button>
         </div>`).join('')}
 
@@ -708,6 +710,15 @@ function runApp(db){
     });
     document.querySelectorAll('[data-del]').forEach(btn=>{
       btn.onclick = () => db.ref(`gameweeks/${gw}/fixtures/${btn.dataset.del}`).remove();
+    });
+    document.querySelectorAll('[data-markout]').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.markout;
+        if (confirm(`Mark ${state.players[id].name} out in GW${gw}?`)) {
+          db.ref(`players/${id}`).update({status:'out', eliminatedGW: gw})
+            .then(()=> showToast(`${state.players[id].name} marked out`));
+        }
+      };
     });
     document.querySelectorAll('[data-reinstate]').forEach(btn=>{
       btn.onclick = () => db.ref(`players/${btn.dataset.reinstate}`).update({status:'alive', eliminatedGW:null});
