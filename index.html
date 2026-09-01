@@ -299,8 +299,65 @@ const BUILTIN_FIXTURES = {
     ["Sunderland","Fulham","2026-08-30T14:00:00+01:00"],
     ["Manchester United","Ipswich Town","2026-08-30T16:30:00+01:00"],
     ["Aston Villa","Arsenal","2026-08-31T20:00:00+01:00"]
+  ],
+  3: [
+    ["Ipswich Town","Liverpool","2026-09-04T20:00:00+01:00"],
+    ["Newcastle United","AFC Bournemouth","2026-09-05T12:30:00+01:00"],
+    ["Brentford","Sunderland","2026-09-05T15:00:00+01:00"],
+    ["Brighton & Hove Albion","Leeds United","2026-09-05T15:00:00+01:00"],
+    ["Fulham","Crystal Palace","2026-09-05T15:00:00+01:00"],
+    ["Manchester City","Coventry City","2026-09-05T15:00:00+01:00"],
+    ["Nottingham Forest","Tottenham Hotspur","2026-09-05T15:00:00+01:00"],
+    ["Hull City","Aston Villa","2026-09-05T17:30:00+01:00"],
+    ["Everton","Manchester United","2026-09-06T14:00:00+01:00"],
+    ["Arsenal","Chelsea","2026-09-06T16:30:00+01:00"]
+  ],
+  4: [
+    ["AFC Bournemouth","Brentford","2026-09-12T15:00:00+01:00"],
+    ["Aston Villa","Nottingham Forest","2026-09-12T15:00:00+01:00"],
+    ["Chelsea","Hull City","2026-09-12T15:00:00+01:00"],
+    ["Crystal Palace","Ipswich Town","2026-09-12T15:00:00+01:00"],
+    ["Liverpool","Fulham","2026-09-12T15:00:00+01:00"],
+    ["Tottenham Hotspur","Everton","2026-09-12T17:30:00+01:00"],
+    ["Sunderland","Arsenal","2026-09-12T20:00:00+01:00"],
+    ["Coventry City","Brighton & Hove Albion","2026-09-13T14:00:00+01:00"],
+    ["Manchester United","Manchester City","2026-09-13T16:30:00+01:00"],
+    ["Leeds United","Newcastle United","2026-09-14T20:00:00+01:00"]
+  ],
+  5: [
+    ["Brentford","Chelsea","2026-09-18T20:00:00+01:00"],
+    ["Tottenham Hotspur","Aston Villa","2026-09-19T12:30:00+01:00"],
+    ["Brighton & Hove Albion","Arsenal","2026-09-19T15:00:00+01:00"],
+    ["Everton","Ipswich Town","2026-09-19T15:00:00+01:00"],
+    ["Leeds United","Crystal Palace","2026-09-19T15:00:00+01:00"],
+    ["Manchester City","Sunderland","2026-09-19T15:00:00+01:00"],
+    ["Newcastle United","Hull City","2026-09-19T15:00:00+01:00"],
+    ["Nottingham Forest","Coventry City","2026-09-19T17:30:00+01:00"],
+    ["AFC Bournemouth","Liverpool","2026-09-20T14:00:00+01:00"],
+    ["Fulham","Manchester United","2026-09-20T16:30:00+01:00"]
+  ],
+  6: [
+    ["Arsenal","Leeds United","2026-10-10T12:30:00+01:00"],
+    ["Aston Villa","Brentford","2026-10-10T15:00:00+01:00"],
+    ["Chelsea","AFC Bournemouth","2026-10-10T15:00:00+01:00"],
+    ["Ipswich Town","Fulham","2026-10-10T15:00:00+01:00"],
+    ["Sunderland","Brighton & Hove Albion","2026-10-10T15:00:00+01:00"],
+    ["Manchester United","Tottenham Hotspur","2026-10-10T17:30:00+01:00"],
+    ["Crystal Palace","Nottingham Forest","2026-10-11T14:00:00+01:00"],
+    ["Hull City","Everton","2026-10-11T14:00:00+01:00"],
+    ["Liverpool","Manchester City","2026-10-11T16:30:00+01:00"],
+    ["Coventry City","Newcastle United","2026-10-12T20:00:00+01:00"]
   ]
 };
+
+// Team names vary between sources ("Bournemouth" vs "AFC Bournemouth"), so
+// compare a normalised form when matching fixtures.
+function normTeam(n){
+  return String(n||'').toLowerCase()
+    .replace(/&/g,'and')
+    .replace(/\bafc\b|\bfc\b/g,'')
+    .replace(/[^a-z]/g,'');
+}
 
 if (firebaseConfig === "FIREBASE_CONFIG_PLACEHOLDER") {
   document.getElementById('setupScreen').style.display = 'block';
@@ -383,6 +440,15 @@ function runApp(db){
     if (!ts) return '';
     return new Date(ts).toLocaleString([], {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
   }
+  // The team a player picked in the gameweek they went out
+  function eliminationTeam(id){
+    const p = state.players[id];
+    if (!p || p.status !== 'out' || !p.eliminatedGW) return null;
+    const gd = state.gameweeks[p.eliminatedGW];
+    const pick = gd && gd.picks && gd.picks[id];
+    return pick ? pick.team : null;
+  }
+
   function displayName(name){
     return name && name.trim().toLowerCase() === 'aman' ? `${name} (dictator)` : name;
   }
@@ -635,7 +701,9 @@ function runApp(db){
         return `<div class="fixture-row">
           <span class="fixture-teams">${p.name}</span>
           <span class="board-meta">${pk ? pk.team : '—'}</span>
-          ${pk ? `<button class="btn-small btn-danger" data-clearpick="${id}">Clear</button>` : ''}
+          ${pk
+            ? `<button class="btn-small btn-danger" data-clearpick="${id}">Clear</button>`
+            : `<button class="btn-small" data-setpick="${id}">Set</button>`}
         </div>`;
       }).join('')}
       <button id="clearAllPicksBtn" class="btn-small btn-danger" style="width:100%;margin-top:10px;">Clear all picks for GW${gw}</button>
@@ -646,7 +714,7 @@ function runApp(db){
       <h3>Players</h3>
       ${Object.entries(state.players).map(([id,p])=>`
         <div class="fixture-row">
-          <span class="fixture-teams">${p.name} ${p.status==='out'?`<span style="color:var(--red);">(out, GW${p.eliminatedGW})</span>`:''}</span>
+          <span class="fixture-teams">${p.name} ${p.status==='out'?`<span style="color:var(--red);">(out, GW${p.eliminatedGW}${eliminationTeam(id) ? ` — ${eliminationTeam(id)}` : ''})</span>`:''}</span>
           ${p.status==='out'
             ? `<button class="btn-small" data-reinstate="${id}">Reinstate</button>`
             : `<button class="btn-small btn-danger" data-markout="${id}">Mark out</button>`}
@@ -737,6 +805,15 @@ function runApp(db){
         }
       };
     });
+    document.querySelectorAll('[data-setpick]').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.setpick;
+        const team = prompt(`Set ${state.players[id].name}'s pick for GW${gw} (type the team name):`);
+        if (!team || !team.trim()) return;
+        db.ref(`gameweeks/${gw}/picks/${id}`).set({team: team.trim(), submittedAt: Date.now()})
+          .then(()=> showToast('Pick set'));
+      };
+    });
     $('clearAllPicksBtn').onclick = () => {
       if (confirm(`Clear ALL picks for GW${gw}? This can't be undone.`)) {
         db.ref(`gameweeks/${gw}/picks`).remove().then(()=> showToast('All picks cleared'));
@@ -797,7 +874,7 @@ function runApp(db){
       const merged = {};
       Object.values(existingFx).forEach((e, i) => { merged['e' + i] = e; });
       Object.values(fixturesObj).forEach(f => {
-        const key = Object.keys(merged).find(k => merged[k].home === f.home && merged[k].away === f.away);
+        const key = Object.keys(merged).find(k => normTeam(merged[k].home) === normTeam(f.home) && normTeam(merged[k].away) === normTeam(f.away));
         if (key) {
           if (f.result) merged[key].result = f.result;
           if (f.kickoff) merged[key].kickoff = f.kickoff;
@@ -901,13 +978,17 @@ function runApp(db){
     const keys = Object.keys(existing);
     if (keys.length >= builtin.length) { fixtureFillAttempted[gw] = true; return; }
     fixtureFillAttempted[gw] = true;
+    // Rebuild from the built-in list (authoritative names), keeping any results already set
     const merged = {};
-    keys.forEach((k,i)=>{ merged['e'+i] = existing[k]; });
-    builtin.forEach(f => {
-      const match = Object.keys(merged).find(k => merged[k].home === f[0] && merged[k].away === f[1]);
-      if (!match) {
-        merged['b' + Object.keys(merged).length] = { home: f[0], away: f[1], kickoff: new Date(f[2]).getTime(), result: null };
-      }
+    builtin.forEach((f, i) => {
+      const prev = Object.values(existing).find(e =>
+        normTeam(e.home) === normTeam(f[0]) && normTeam(e.away) === normTeam(f[1]));
+      merged['f' + i] = {
+        home: f[0],
+        away: f[1],
+        kickoff: new Date(f[2]).getTime(),
+        result: prev ? (prev.result || null) : null
+      };
     });
     db.ref(`gameweeks/${gw}/fixtures`).set(merged);
   }
