@@ -166,6 +166,16 @@
   .small-note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5;}
 
   .empty{color:var(--muted);font-size:13px;text-align:center;padding:20px 0;}
+  table.lb{width:100%;border-collapse:collapse;font-size:14px;}
+  table.lb th{
+    text-align:left;font-family:'Oswald',sans-serif;font-weight:600;font-size:11px;
+    letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);
+    padding:6px 10px;border-bottom:1px solid var(--border);
+  }
+  table.lb td{padding:10px;border-bottom:1px solid var(--border);}
+  table.lb td.pos{width:32px;font-family:'JetBrains Mono',monospace;color:var(--muted);}
+  table.lb td.pts{text-align:right;font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--green);width:56px;}
+  table.lb tr.top td.pos{color:var(--amber);}
   .winner-banner{
     background:linear-gradient(135deg, rgba(0,255,133,0.15), rgba(124,63,166,0.15));
     border:1px solid var(--green);border-radius:8px;padding:20px;text-align:center;margin:16px;
@@ -229,6 +239,11 @@
   <section>
     <div class="section-title">The Board</div>
     <div class="board" id="board"></div>
+  </section>
+
+  <section>
+    <div class="section-title">Season Table</div>
+    <div id="leaderboard"></div>
   </section>
 
   <section id="fixturesSection">
@@ -381,6 +396,7 @@ function runApp(db){
     state.meta = v.meta || {currentGW:1, locked:false};
     state.gameweeks = v.gameweeks || {};
     state.champions = v.champions || {};
+    state.scores = v.scores || {};
     seedPlayersOnce();
     fillMissingFixtures();
     render();
@@ -725,6 +741,19 @@ function runApp(db){
         <input type="text" id="newPlayerInput" placeholder="Player name">
         <button id="addPlayerBtn" class="btn-small">Add player</button>
       </div>
+      <button id="reinstateAllBtn" class="btn-primary" style="width:100%;margin-top:10px;">Reinstate everyone (start new round)</button>
+      <p class="small-note">Brings every player back in and clears used-team history from the current gameweek onwards. Points are kept.</p>
+    </div>
+
+    <div class="admin-block">
+      <h3>Season Points</h3>
+      ${Object.entries(state.players).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([id,p])=>`
+        <div class="fixture-row">
+          <span class="fixture-teams">${p.name}</span>
+          <span class="board-meta" style="font-size:14px;color:var(--green);">${Number((state.scores&&state.scores[id])||0)}</span>
+          <button class="btn-small" data-setpts="${id}">Edit</button>
+        </div>`).join('')}
+      <p class="small-note">Points are added automatically when someone is eliminated or wins. Use Edit to correct a total.</p>
     </div>`;
 
     $('adminArea').innerHTML = html;
@@ -783,8 +812,11 @@ function runApp(db){
       btn.onclick = () => {
         const id = btn.dataset.markout;
         if (confirm(`Mark ${state.players[id].name} out in GW${gw}?`)) {
-          db.ref(`players/${id}`).update({status:'out', eliminatedGW: gw})
-            .then(()=> showToast(`${state.players[id].name} marked out`));
+          const upd = {};
+          upd[`players/${id}/status`] = 'out';
+          upd[`players/${id}/eliminatedGW`] = gw;
+          upd[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + gw;
+          db.ref().update(upd).then(()=> showToast(`${state.players[id].name} marked out (+${gw} pts)`));
         }
       };
     });
@@ -819,6 +851,27 @@ function runApp(db){
         db.ref(`gameweeks/${gw}/picks`).remove().then(()=> showToast('All picks cleared'));
       }
     };
+    $('reinstateAllBtn').onclick = () => {
+      if (!confirm(`Bring everyone back in for GW${gw}? Used-team history resets from this gameweek.`)) return;
+      const upd = {};
+      Object.keys(state.players).forEach(id=>{
+        upd[`players/${id}/status`] = 'alive';
+        upd[`players/${id}/eliminatedGW`] = null;
+      });
+      upd['meta/roundStartGW'] = gw;
+      db.ref().update(upd).then(()=> showToast('Everyone reinstated'));
+    };
+    document.querySelectorAll('[data-setpts]').forEach(btn=>{
+      btn.onclick = () => {
+        const id = btn.dataset.setpts;
+        const cur = Number((state.scores&&state.scores[id])||0);
+        const v = prompt(`Points for ${state.players[id].name}:`, cur);
+        if (v === null) return;
+        const n = parseInt(v, 10);
+        if (isNaN(n)) { showToast('Enter a number'); return; }
+        db.ref(`scores/${id}`).set(n).then(()=> showToast('Points updated'));
+      };
+    });
     $('addPlayerBtn').onclick = () => {
       const name = $('newPlayerInput').value.trim();
       if (!name) { showToast('Enter a name'); return; }
@@ -911,6 +964,7 @@ function runApp(db){
       if (p.status !== 'alive') return;
       const pick = picks[id];
       if (!pick) {
+        // No pick submitted — eliminated, and no points for a gameweek they didn't play
         updates[`players/${id}/status`] = 'out';
         updates[`players/${id}/eliminatedGW`] = gw;
         return;
@@ -924,6 +978,7 @@ function runApp(db){
       if (!won) {
         updates[`players/${id}/status`] = 'out';
         updates[`players/${id}/eliminatedGW`] = gw;
+        updates[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + gw;
       }
     });
 
@@ -949,6 +1004,7 @@ function runApp(db){
     if (survivors.length === 1) {
       // Crown the winner, then bring everyone back in for the next gameweek
       const champId = survivors[0];
+      updates[`scores/${champId}`] = Number((state.scores && state.scores[champId]) || 0) + gw + 3;
       updates[`champions/gw${gw}`] = {
         playerId: champId,
         name: state.players[champId].name,
@@ -1030,12 +1086,35 @@ function runApp(db){
     </div>`;
   }
 
+  function renderLeaderboard(){
+    const ids = Object.keys(state.players);
+    if (!ids.length) { $('leaderboard').innerHTML = ''; return; }
+    const rows = ids.map(id => ({
+      id,
+      name: state.players[id].name,
+      pts: Number((state.scores && state.scores[id]) || 0)
+    })).sort((a,b) => b.pts - a.pts || a.name.localeCompare(b.name));
+
+    $('leaderboard').innerHTML = `<table class="lb">
+      <thead><tr><th></th><th>Player</th><th style="text-align:right;">Pts</th></tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr class="${i===0 && r.pts>0 ? 'top':''}">
+          <td class="pos">${i+1}</td>
+          <td>${displayName(r.name)}${r.id===myPlayerId?' <span style="color:var(--muted);">(you)</span>':''}</td>
+          <td class="pts">${r.pts}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <p class="small-note">One point for each gameweek you survive to. A sole winner gets their gameweek's points plus a 3-point bonus.</p>`;
+  }
+
   function render(){
     renderIdentity();
     renderLockPill();
     renderWinner();
     renderPick();
     renderBoard();
+    renderLeaderboard();
     renderFixtures();
     renderAdmin();
   }
