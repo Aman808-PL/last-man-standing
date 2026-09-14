@@ -398,6 +398,7 @@ function runApp(db){
     state.champions = v.champions || {};
     state.scores = v.scores || {};
     seedPlayersOnce();
+    seedScoresOnce();
     fillMissingFixtures();
     render();
   });
@@ -1047,6 +1048,29 @@ function runApp(db){
       };
     });
     db.ref(`gameweeks/${gw}/fixtures`).set(merged);
+  }
+
+  // One-time backfill of points earned before scoring was added.
+  // Keyed by name; players not listed start on 0.
+  const SEED_SCORES = {
+    "aaron": 1, "jon": 1,
+    "mani": 2, "nick": 2, "pav": 2, "sam": 2, "parji": 2,
+    "aman": 4, "gav": 4, "taron": 4
+    // Tav and Bal intentionally omitted — no picks made, so no points
+  };
+  let scoreSeedAttempted = false;
+  function seedScoresOnce(){
+    if (scoreSeedAttempted) return;
+    if (state.meta.scoresSeeded) { scoreSeedAttempted = true; return; }
+    if (!Object.keys(state.players).length) return; // wait for players to load
+    scoreSeedAttempted = true;
+    const updates = {};
+    Object.entries(state.players).forEach(([id,p])=>{
+      const key = (p.name||'').trim().toLowerCase();
+      updates[`scores/${id}`] = SEED_SCORES[key] || 0;
+    });
+    updates['meta/scoresSeeded'] = true;
+    db.ref().update(updates);
   }
 
   let seedAttempted = false;
