@@ -754,12 +754,19 @@ function runApp(db){
 
     <div class="admin-block">
       <h3>Season Points</h3>
-      ${Object.entries(state.players).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([id,p])=>`
-        <div class="fixture-row">
-          <span class="fixture-teams">${p.name}</span>
-          <span class="board-meta" style="font-size:14px;color:var(--green);">${Number((state.scores&&state.scores[id])||0)}</span>
-          <button class="btn-small" data-setpts="${id}">Edit</button>
-        </div>`).join('')}
+      <table class="lb">
+        <thead><tr><th></th><th>Player</th><th style="text-align:right;">Pts</th><th></th></tr></thead>
+        <tbody>
+        ${Object.entries(state.players)
+          .sort((a,b)=> Number((state.scores&&state.scores[b[0]])||0) - Number((state.scores&&state.scores[a[0]])||0) || a[1].name.localeCompare(b[1].name))
+          .map(([id,p],i)=>`<tr>
+            <td class="pos">${i+1}</td>
+            <td>${p.name}</td>
+            <td class="pts">${Number((state.scores&&state.scores[id])||0)}</td>
+            <td style="text-align:right;width:70px;"><button class="btn-small" data-setpts="${id}">Edit</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
       <div class="row-gap" style="margin-top:10px;">
         <span class="board-meta" style="flex:2;align-self:center;">Current round started at GW${roundStartGW()}</span>
         <button id="setRoundStartBtn" class="btn-small">Change</button>
