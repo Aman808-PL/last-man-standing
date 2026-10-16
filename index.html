@@ -415,6 +415,9 @@ function runApp(db){
 
   // Teams a player has used in the CURRENT round (resets when a winner is crowned)
   function roundStartGW(){ return state.meta.roundStartGW || 1; }
+  // Points = how many gameweeks into the current round you lasted.
+  // First week of a new round is worth 1, regardless of the gameweek number.
+  function weeksSurvived(gw){ return Math.max(1, gw - roundStartGW() + 1); }
   function teamsUsedBy(playerId){
     const used = [];
     const start = roundStartGW();
@@ -816,8 +819,8 @@ function runApp(db){
           const upd = {};
           upd[`players/${id}/status`] = 'out';
           upd[`players/${id}/eliminatedGW`] = gw;
-          upd[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + gw;
-          db.ref().update(upd).then(()=> showToast(`${state.players[id].name} marked out (+${gw} pts)`));
+          upd[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + weeksSurvived(gw);
+          db.ref().update(upd).then(()=> showToast(`${state.players[id].name} marked out (+${weeksSurvived(gw)} pts)`));
         }
       };
     });
@@ -979,7 +982,7 @@ function runApp(db){
       if (!won) {
         updates[`players/${id}/status`] = 'out';
         updates[`players/${id}/eliminatedGW`] = gw;
-        updates[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + gw;
+        updates[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + weeksSurvived(gw);
       }
     });
 
@@ -1005,7 +1008,7 @@ function runApp(db){
     if (survivors.length === 1) {
       // Crown the winner, then bring everyone back in for the next gameweek
       const champId = survivors[0];
-      updates[`scores/${champId}`] = Number((state.scores && state.scores[champId]) || 0) + gw + 3;
+      updates[`scores/${champId}`] = Number((state.scores && state.scores[champId]) || 0) + weeksSurvived(gw) + 3;
       updates[`champions/gw${gw}`] = {
         playerId: champId,
         name: state.players[champId].name,
@@ -1129,7 +1132,7 @@ function runApp(db){
         </tr>`).join('')}
       </tbody>
     </table>
-    <p class="small-note">One point for each gameweek you survive to. A sole winner gets their gameweek's points plus a 3-point bonus.</p>`;
+    <p class="small-note">One point for each gameweek you last in a round. A sole winner gets their points plus a 3-point bonus. Everyone restarts at the next round.</p>`;
   }
 
   function render(){
