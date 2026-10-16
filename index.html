@@ -251,6 +251,8 @@
     <div id="fixturesArea"></div>
   </section>
 
+  <p class="small-note" style="text-align:center;padding:12px 16px 0;">Build: scoring v3 (points = weeks lasted in the round)</p>
+
   <section>
     <div class="section-title">
       Admin
@@ -399,6 +401,7 @@ function runApp(db){
     state.scores = v.scores || {};
     seedPlayersOnce();
     seedScoresOnce();
+    fixScoresOnce();
     fillMissingFixtures();
     render();
   });
@@ -757,7 +760,11 @@ function runApp(db){
           <span class="board-meta" style="font-size:14px;color:var(--green);">${Number((state.scores&&state.scores[id])||0)}</span>
           <button class="btn-small" data-setpts="${id}">Edit</button>
         </div>`).join('')}
-      <p class="small-note">Points are added automatically when someone is eliminated or wins. Use Edit to correct a total.</p>
+      <div class="row-gap" style="margin-top:10px;">
+        <span class="board-meta" style="flex:2;align-self:center;">Current round started at GW${roundStartGW()}</span>
+        <button id="setRoundStartBtn" class="btn-small">Change</button>
+      </div>
+      <p class="small-note">Points are added automatically when someone is eliminated or wins: 1 for each gameweek lasted since the round started. Use Edit to correct a total.</p>
     </div>`;
 
     $('adminArea').innerHTML = html;
@@ -865,6 +872,13 @@ function runApp(db){
       upd['meta/roundStartGW'] = gw;
       db.ref().update(upd).then(()=> showToast('Everyone reinstated'));
     };
+    $('setRoundStartBtn').onclick = () => {
+      const v = prompt('Which gameweek did the current round start at?', roundStartGW());
+      if (v === null) return;
+      const n = parseInt(v, 10);
+      if (isNaN(n) || n < 1) { showToast('Enter a gameweek number'); return; }
+      db.ref('meta/roundStartGW').set(n).then(()=> showToast('Round start set to GW' + n));
+    };
     document.querySelectorAll('[data-setpts]').forEach(btn=>{
       btn.onclick = () => {
         const id = btn.dataset.setpts;
@@ -963,6 +977,7 @@ function runApp(db){
     let evaluated = 0;
     const pending = [];
     const unmatched = [];
+    const outLines = [];
 
     Object.entries(state.players).forEach(([id,p])=>{
       if (p.status !== 'alive') return;
@@ -971,6 +986,7 @@ function runApp(db){
         // No pick submitted — eliminated, and no points for a gameweek they didn't play
         updates[`players/${id}/status`] = 'out';
         updates[`players/${id}/eliminatedGW`] = gw;
+        outLines.push(`${p.name}: out, no pick (+0)`);
         return;
       }
       const fixture = Object.values(fx).find(f => f.home === pick.team || f.away === pick.team);
@@ -982,7 +998,10 @@ function runApp(db){
       if (!won) {
         updates[`players/${id}/status`] = 'out';
         updates[`players/${id}/eliminatedGW`] = gw;
-        updates[`scores/${id}`] = Number((state.scores && state.scores[id]) || 0) + weeksSurvived(gw);
+        const pts = weeksSurvived(gw);
+        const cur = Number((state.scores && state.scores[id]) || 0);
+        updates[`scores/${id}`] = cur + pts;
+        outLines.push(`${p.name}: out with ${pick.team} (+${pts}, total ${cur + pts})`);
       }
     });
 
@@ -1004,6 +1023,17 @@ function runApp(db){
       if (updates[`players/${id}/status`] === 'out') return false;
       return state.players[id].status !== 'out';
     });
+
+    const lines = outLines.slice();
+    if (survivors.length === 1) {
+      const wid = survivors[0];
+      const wpts = weeksSurvived(gw) + 3;
+      const wcur = Number((state.scores && state.scores[wid]) || 0);
+      lines.push(`${state.players[wid].name}: WINS (+${wpts} incl. 3 bonus, total ${wcur + wpts})`);
+    }
+    const aliveNames = survivors.map(id => state.players[id].name).join(', ') || 'nobody';
+    const summary = `Round started at GW${roundStartGW()}.\nApplying GW${gw} results:\n\n${lines.join('\n')}\n\nStill alive: ${aliveNames}\n\nCheck the points look right, then press OK.`;
+    if (!confirm(summary)) return;
 
     if (survivors.length === 1) {
       // Crown the winner, then bring everyone back in for the next gameweek
@@ -1073,6 +1103,25 @@ function runApp(db){
       updates[`scores/${id}`] = SEED_SCORES[key] || 0;
     });
     updates['meta/scoresSeeded'] = true;
+    db.ref().update(updates);
+  }
+
+  // One-time fix for the two GW6 totals that were written using the old scoring.
+  // Only changes a total if it still holds the wrong value.
+  let scoreFixAttempted = false;
+  function fixScoresOnce(){
+    if (scoreFixAttempted) return;
+    if (state.meta.scoresFixV3) { scoreFixAttempted = true; return; }
+    if (!Object.keys(state.players).length) return;
+    scoreFixAttempted = true;
+    const updates = {};
+    Object.entries(state.players).forEach(([id,p])=>{
+      const name = (p.name||'').trim().toLowerCase();
+      const cur = Number((state.scores && state.scores[id]) || 0);
+      if (name === 'aaron' && cur === 7) updates[`scores/${id}`] = 3;
+      if (name === 'bal' && cur === 6) updates[`scores/${id}`] = 2;
+    });
+    updates['meta/scoresFixV3'] = true;
     db.ref().update(updates);
   }
 
