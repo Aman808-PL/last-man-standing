@@ -138,7 +138,7 @@
 
   <!-- CHARACTERS -->
   <div id="tab-chars" class="hidden">
-    <p class="hint">Give every piece its own character: a name plus an emoji or a photo. Changes save automatically in this browser. The small badge on each piece shows its chess role.</p>
+    <p class="hint">Pick one character for each type of piece on each side (e.g. every white pawn is the same character): a name plus an emoji or a photo. Changes save automatically in this browser. The small badge on each piece shows its chess role.</p>
     <div class="presets">
       <select id="preset-side"><option value="w">White side</option><option value="b">Black side</option><option value="both">Both sides</option></select>
       <select id="preset">
@@ -168,7 +168,8 @@
   const ROLE = {k:'King',q:'Queen',r:'Rook',b:'Bishop',n:'Knight',p:'Pawn'};
   const BACK = ['r','n','b','q','k','b','n','r'];
   const FILES = 'abcdefgh';
-  const STORE = 'lms-chess-characters-v1';
+  const STORE = 'lms-chess-characters-v2';
+  const TYPES = ['k','q','r','b','n','p'];
 
   // ---- piece identities: one character per piece (32 total) ----
   function pieceIds(){
@@ -183,23 +184,14 @@
   const IDS = pieceIds();
 
   const PRESETS = {
-    classic: c => IDS.filter(p=>p.c===c).reduce((a,p)=>(a[p.id]={name:'',glyph:'',img:''},a),{}),
+    classic: c => TYPES.reduce((a,t)=>(a[c+'-'+t]={name:'',glyph:'',img:''},a),{}),
     football: makeSet({k:['🧑‍💼','Manager'],q:['⭐','Captain'],r:['🧤','Keeper'],b:['🎯','Playmaker'],n:['⚡','Winger'],p:['⚽','Player']}),
     family: makeSet({k:['👴','Grandad'],q:['👵','Nan'],r:['👨','Dad'],b:['👩','Mum'],n:['🧑','Uncle'],p:['🧒','Kid']}),
     animals: makeSet({k:['🦁','Lion'],q:['🦅','Eagle'],r:['🐘','Elephant'],b:['🦉','Owl'],n:['🐎','Horse'],p:['🐭','Mouse']}),
     fantasy: makeSet({k:['🤴','King'],q:['🧙‍♀️','Sorceress'],r:['🏰','Tower'],b:['🧝','Elf'],n:['🐉','Dragon'],p:['🛡️','Guard']})
   };
   function makeSet(map){
-    return c => {
-      const out={}; const count={};
-      IDS.filter(p=>p.c===c).forEach(p=>{
-        count[p.t]=(count[p.t]||0)+1;
-        const [g,n]=map[p.t];
-        const multi = p.t==='p'||p.t==='r'||p.t==='b'||p.t==='n';
-        out[p.id]={glyph:g,name:multi? n+' '+count[p.t] : n,img:''};
-      });
-      return out;
-    };
+    return c => TYPES.reduce((a,t)=>(a[c+'-'+t]={glyph:map[t][0],name:map[t][1],img:''},a),{});
   }
 
   let chars = load();
@@ -208,7 +200,8 @@
     return {...PRESETS.classic('w'), ...PRESETS.classic('b')};
   }
   function save(){ try{ localStorage.setItem(STORE, JSON.stringify(chars)); }catch(e){ alert('Could not save - try smaller photos.'); } }
-  function ch(id){ return chars[id] || {name:'',glyph:'',img:''}; }
+  // one character per piece type per side: all white pawns share 'w-p', etc.
+  function ch(p){ return chars[p.c+'-'+p.t] || {name:'',glyph:'',img:''}; }
 
   // ---- game state ----
   let S, history, flipped=false, selected=null, legalFromSel=[], pendingPromo=null;
@@ -312,7 +305,7 @@
 
   function doMove(m){
     const notation = san(S,m);
-    const who = ch(S.b[m.from].id).name;
+    const who = ch(S.b[m.from]).name;
     history.push(S);
     S = apply(S,m);
     S.moves = history[history.length-1].moves.concat([{san:notation, who}]);
@@ -322,7 +315,7 @@
 
   // ---- rendering ----
   function avatarHTML(p, cls){
-    const c=ch(p.id);
+    const c=ch(p);
     const inner = c.img ? `<img src="${c.img}" alt="">` : esc(c.glyph || SYM[p.t]);
     return inner;
   }
@@ -346,11 +339,11 @@
       if(showR) d.insertAdjacentHTML('beforeend',`<span class="coord r">${8-r}</span>`);
       const p=S.b[i];
       if(p){
-        const c=ch(p.id);
+        const c=ch(p);
         const custom = c.img || c.glyph;
         d.insertAdjacentHTML('beforeend',`<div class="piece ${p.c}" title="${esc((c.name||ROLE[p.t])+' ('+ROLE[p.t]+')')}">
           <div class="avatar" style="position:relative">${avatarHTML(p)}</div>
-          ${custom||p.promoted?`<span class="badge">${SYM[p.t]}</span>`:''}
+          ${custom?`<span class="badge">${SYM[p.t]}</span>`:''}
           ${c.name?`<div class="name">${esc(c.name)}</div>`:''}
         </div>`);
       }
@@ -359,7 +352,7 @@
       el.appendChild(d);
     }
     // captured
-    const capHTML = list => list.map(p=>`<span class="mini ${p.c}" title="${esc(ch(p.id).name||ROLE[p.t])}">${avatarHTML(p)}</span>`).join('');
+    const capHTML = list => list.map(p=>`<span class="mini ${p.c}" title="${esc(ch(p).name||ROLE[p.t])}">${avatarHTML(p)}</span>`).join('');
     const topColor = flipped ? 'w':'b';
     document.getElementById('cap-top').innerHTML = capHTML(S.captured[topColor]);
     document.getElementById('cap-bottom').innerHTML = capHTML(S.captured[opp(topColor)]);
@@ -405,20 +398,20 @@
   function renderEditor(){
     for(const c of ['w','b']){
       const g=document.getElementById('edit-'+c); g.innerHTML='';
-      const list = IDS.filter(p=>p.c===c);
-      list.forEach(p=>{
-        const cd=ch(p.id);
+      TYPES.forEach(t=>{
+        const p={c,t}, key=c+'-'+t, cd=ch(p);
+        const count={k:1,q:1,r:2,b:2,n:2,p:8}[t];
         const card=document.createElement('div'); card.className='card';
         card.innerHTML=`
-          <div class="top"><span class="mini ${c}">${cd.img?`<img src="${cd.img}" alt="">`:esc(cd.glyph||SYM[p.t])}</span>
-            <div><div class="role">${ROLE[p.t]} · ${FILES[p.file]}${p.t==='p'?(c==='w'?2:7):(c==='w'?1:8)}</div></div></div>
+          <div class="top"><span class="mini ${c}">${cd.img?`<img src="${cd.img}" alt="">`:esc(cd.glyph||SYM[t])}</span>
+            <div><div class="role">${ROLE[t]}${count>1?' × '+count:''}</div></div></div>
           <input type="text" class="nm" placeholder="Name" maxlength="20" value="${esc(cd.name||'')}">
-          <div class="row"><input type="text" class="emoji" placeholder="${SYM[p.t]}" maxlength="8" value="${esc(cd.glyph||'')}" title="Emoji or letters">
+          <div class="row"><input type="text" class="emoji" placeholder="${SYM[t]}" maxlength="8" value="${esc(cd.glyph||'')}" title="Emoji or letters">
             <label class="file" style="flex:1">📷 Photo<input type="file" accept="image/*"></label></div>
           ${cd.img?'<button class="clear">Remove photo</button>':''}`;
-        const upd=(k,v)=>{ chars[p.id]={...ch(p.id),[k]:v}; save(); render(); };
+        const upd=(k,v)=>{ chars[key]={...ch(p),[k]:v}; save(); render(); };
         card.querySelector('.nm').oninput=e=>upd('name',e.target.value);
-        card.querySelector('.emoji').oninput=e=>{ upd('glyph',e.target.value); card.querySelector('.mini').innerHTML = ch(p.id).img?`<img src="${ch(p.id).img}">`:esc(e.target.value||SYM[p.t]); };
+        card.querySelector('.emoji').oninput=e=>{ upd('glyph',e.target.value); card.querySelector('.mini').innerHTML = ch(p).img?`<img src="${ch(p).img}">`:esc(e.target.value||SYM[t]); };
         card.querySelector('input[type=file]').onchange=e=>{ const f=e.target.files[0]; if(f) shrink(f, url=>{ upd('img',url); renderEditor(); }); };
         const cl=card.querySelector('.clear'); if(cl) cl.onclick=()=>{ upd('img',''); renderEditor(); };
         g.appendChild(card);
