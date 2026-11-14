@@ -37,8 +37,8 @@
   .captured .mini{width:26px;height:26px;font-size:16px;}
 
   .board-wrap{position:relative;}
-  .board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1/1;width:100%;border:2px solid var(--border);border-radius:6px;overflow:hidden;user-select:none;}
-  .sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .board{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));aspect-ratio:1/1;width:100%;border:2px solid var(--border);border-radius:6px;overflow:hidden;user-select:none;}
+  .sq{position:relative;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;cursor:pointer;}
   .sq.light{background:var(--sq-light);}
   .sq.dark{background:var(--sq-dark);}
   .sq.last::before{content:"";position:absolute;inset:0;background:rgba(255,184,0,0.35);}
@@ -50,7 +50,7 @@
   .coord.f{bottom:2px;right:4px;} .coord.r{top:2px;left:4px;}
   .sq.light .coord{color:var(--sq-dark);} .sq.dark .coord{color:var(--sq-light);}
 
-  .piece{position:relative;z-index:2;width:84%;height:84%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;}
+  .piece{position:relative;z-index:2;min-width:0;width:84%;height:84%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;}
   .avatar{width:78%;aspect-ratio:1/1;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:clamp(16px,5.2vw,34px);line-height:1;}
   .avatar img{width:100%;height:100%;object-fit:cover;}
   .w .avatar{background:#F7F7F2;border:3px solid #FFFFFF;box-shadow:0 0 0 2px #0A1612, 0 2px 4px rgba(0,0,0,0.4);color:#111;}
@@ -142,6 +142,7 @@
     <div class="presets">
       <select id="preset-side"><option value="w">White side</option><option value="b">Black side</option><option value="both">Both sides</option></select>
       <select id="preset">
+        <option value="squad">Our squad</option>
         <option value="classic">Classic pieces</option>
         <option value="football">Football squad</option>
         <option value="family">Family</option>
@@ -168,7 +169,7 @@
   const ROLE = {k:'King',q:'Queen',r:'Rook',b:'Bishop',n:'Knight',p:'Pawn'};
   const BACK = ['r','n','b','q','k','b','n','r'];
   const FILES = 'abcdefgh';
-  const STORE = 'lms-chess-characters-v2';
+  const STORE = 'lms-chess-characters-v3';
   const TYPES = ['k','q','r','b','n','p'];
 
   // ---- piece identities: one character per piece (32 total) ----
@@ -185,6 +186,7 @@
 
   const PRESETS = {
     classic: c => TYPES.reduce((a,t)=>(a[c+'-'+t]={name:'',glyph:'',img:''},a),{}),
+    squad: makeSet({k:['🐐','Lionel Messi'],q:['👸','Fiona'],r:['🛡️','Captain America'],b:['🎯','Sniper'],n:['🫏','Donkey'],p:['🦐','Prawn']}),
     football: makeSet({k:['🧑‍💼','Manager'],q:['⭐','Captain'],r:['🧤','Keeper'],b:['🎯','Playmaker'],n:['⚡','Winger'],p:['⚽','Player']}),
     family: makeSet({k:['👴','Grandad'],q:['👵','Nan'],r:['👨','Dad'],b:['👩','Mum'],n:['🧑','Uncle'],p:['🧒','Kid']}),
     animals: makeSet({k:['🦁','Lion'],q:['🦅','Eagle'],r:['🐘','Elephant'],b:['🦉','Owl'],n:['🐎','Horse'],p:['🐭','Mouse']}),
@@ -197,7 +199,7 @@
   let chars = load();
   function load(){
     try{ const s=JSON.parse(localStorage.getItem(STORE)); if(s && typeof s==='object') return s; }catch(e){}
-    return {...PRESETS.classic('w'), ...PRESETS.classic('b')};
+    return {...PRESETS.squad('w'), ...PRESETS.squad('b')};
   }
   function save(){ try{ localStorage.setItem(STORE, JSON.stringify(chars)); }catch(e){ alert('Could not save - try smaller photos.'); } }
   // one character per piece type per side: all white pawns share 'w-p', etc.
